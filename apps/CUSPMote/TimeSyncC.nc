@@ -63,7 +63,7 @@ implementation
   TimeSyncNotify  =   TimeSyncP;
   GlobalTimeSet   =   TimeSyncP;
 
-  components RF233TimeSyncMessageC as ActiveMessageC;
+  components TimeSyncMessageC as ActiveMessageC;
   TimeSyncP.RadioControl    ->  ActiveMessageC;
   TimeSyncP.Send            ->  ActiveMessageC.TimeSyncAMSendMilli[TIMESYNC_AM_FTSP];
   TimeSyncP.Receive         ->  ActiveMessageC.Receive[TIMESYNC_AM_FTSP];
