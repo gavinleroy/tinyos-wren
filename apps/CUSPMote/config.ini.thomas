@@ -1,0 +1,16 @@
+[Nodes]
+numNodes: 3
+type: TelosMote
+makeCmd: make telosb
+[Node1]
+id: 1000
+serialid: XBRGIL1M
+installCmd: make telosb reinstall,$id bsl,$serial
+[Node2]
+id: 1001
+serialid: XBRGGMMJ
+installCmd: make telosb reinstall,$id bsl,$serial
+[Node3]
+id: 1002
+serialid: XBQVBCW9
+installCmd: make telosb reinstall,$id bsl,$serial
