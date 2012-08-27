@@ -30,11 +30,13 @@ implementation {
   components new TimerMilliC() as DownloadTimer;
 
   components SerialActiveMessageC as SAM;
-  components RF233ActiveMessageC;
   
   components TimeSyncC;
+  
+  components RF233ActiveMessageC;
   components RF233TimeSyncMessageC;
-
+  components BQ25010C; // Power, Battery Charging
+  
   MainC.SoftwareInit -> TimeSyncC;
   TimeSyncC.Boot -> MainC;
 
@@ -83,8 +85,12 @@ implementation {
   App.BatteryReadStream -> BatteryLevel; 
   App.BatteryResource -> BatteryLevel; 
 
-  App.LowPowerListening -> RF233ActiveMessageC;
-  
+  App.LowPowerListening -> RF233TimeSyncMessageC;
+
+  components Pcf2127aC;
+  App.Pcf2127a -> Pcf2127aC;
+  App.Pcf2127aRtc -> Pcf2127aC;
+    
   #ifdef MOTE_DEBUG
     components DiagMsgC;
     App.DiagMsg -> DiagMsgC;

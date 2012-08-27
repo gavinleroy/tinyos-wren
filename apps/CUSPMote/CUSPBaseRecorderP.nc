@@ -75,6 +75,10 @@ module CUSPBaseRecorderP {
         interface ReadNow<uint16_t> as BatteryReadNow;
 
         interface GlobalTimeSet;
+        
+        // Real Time Clock
+        interface Pcf2127a;
+        interface Pcf2127aRtc;
 
 #ifdef MOTE_DEBUG
         interface DiagMsg;
@@ -378,6 +382,14 @@ implementation {
     }
 
     event void RssiSend.sendDone(message_t* msg, error_t err) {
+	    #ifdef MOTE_DEBUG_MESSAGES
+	    
+	        if (call DiagMsg.record())
+	        {
+	            call DiagMsg.str("m_d:");
+	            call DiagMsg.send();
+	        }
+	    #endif
         rssilocked = FALSE;
     }
 
@@ -407,6 +419,15 @@ implementation {
             if(!rssilocked) {
                 rssiMaxUnlockCounter = 0;
 
+                    #ifdef MOTE_DEBUG_MESSAGES
+                    
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("m_s1:");
+                            call DiagMsg.send();
+                        }
+                    #endif
+
                 call Leds.led2On();
 
                 call LedOffTimer.startOneShot(LED_INTERVAL);
@@ -431,6 +452,15 @@ implementation {
                 //call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
 
                 call LowPowerListening.setRemoteWakeupInterval(&rssipacket, REMOTE_WAKEUP_INTERVAL);
+
+                    #ifdef MOTE_DEBUG_MESSAGES
+                    
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("m_s2:");
+                            call DiagMsg.send();
+                        }
+                    #endif
 
                 if (call RssiSend.send(AM_BROADCAST_ADDR, &rssipacket, sizeof(rssi_msg_t), rm->localtime) == SUCCESS) {
                     rssilocked = TRUE;
@@ -707,15 +737,60 @@ implementation {
     }
 
     event message_t* Receive.receive(message_t* msg, void* payload, uint8_t len) {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r1:");
+                call DiagMsg.send();
+            }
+        #endif
+
         if (len != sizeof(rssi_msg_t)) {
             call Leds.led1Toggle(); 
             return msg;
         }
 
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r2:");
+                if (logQueueFull) {
+                    call DiagMsg.str("f:1");
+                }
+                else {
+                    call DiagMsg.str("f:0");
+                }
+                if (sleep) {
+                    call DiagMsg.str("s:1");
+                }
+                else {
+                    call DiagMsg.str("s:0");
+                }
+                if (logWriteBusy) {
+                    call DiagMsg.str("lb:1");
+                }
+                else {
+                    call DiagMsg.str("lb:0");
+                }
+                call DiagMsg.send();
+            }
+        #endif
+
         atomic {
             messageCount++;
             
             if (!logQueueFull && !sleep) {
+
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("m_r3:");
+	                call DiagMsg.send();
+	            }
+	        #endif
                 
                 #ifdef SMART_SENSING
                     smartSensing();
@@ -730,6 +805,16 @@ implementation {
                     rssi_serial_msg_t rssi_serial_m;
                     uint32_t time;
                     rssi_msg_t* rssim = (rssi_msg_t*)payload;
+
+			        #ifdef MOTE_DEBUG_MESSAGES
+			        
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("m_r4:");
+			                call DiagMsg.send();
+			            }
+			        #endif
+
 
                     if(call TimeSyncPacket.isValid(msg)) {
                         time = call TimeSyncPacket.eventTime(msg);
@@ -789,6 +874,15 @@ implementation {
                     
                     if (!logWriteBusy)
                     {
+                    #ifdef MOTE_DEBUG_MESSAGES
+                    
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("m_r5:");
+                            call DiagMsg.send();
+                        }
+                    #endif
+                        
                         post logWriteTask();
                         logWriteBusy = TRUE;
                     }                
@@ -799,6 +893,23 @@ implementation {
     }
 
     task void logWriteTask() {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r6:");
+                call DiagMsg.int8(logQueueStart);
+                call DiagMsg.int8(logQueueEnd);
+                if (logQueueFull) {
+                    call DiagMsg.str("f:1");
+                }
+                else {
+                    call DiagMsg.str("f:0");
+                }
+                call DiagMsg.send();
+            }
+        #endif
+        
         // Check to see if all logs are already appended         
         atomic {
           if (logQueueStart == logQueueEnd && !logQueueFull)
@@ -808,10 +919,28 @@ implementation {
                 }
         }
 
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r7:");
+                call DiagMsg.int8(logQueueStart);
+                call DiagMsg.int8(logQueueEnd);
+                if (logQueueFull) {
+                    call DiagMsg.str("f:1");
+                }
+                else {
+                    call DiagMsg.str("f:0");
+                }
+                call DiagMsg.send();
+            }
+        #endif
+        
+/*
         #ifdef DMOTE_DEBUG_QUEUE
             if (call DiagMsg.record())
             {
-                call DiagMsg.str("lw:");
+                call DiagMsg.str("l:w");
                 call DiagMsg.uint16((logQueueDataPt[logQueueEnd]->msg).counter);
                 call DiagMsg.uint16((logQueueDataPt[logQueueEnd]->msg).dst);
                 call DiagMsg.int8((logQueueDataPt[logQueueEnd]->msg).rssi);
@@ -827,13 +956,14 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
+*/
         
             if (call LogWrite.append(logQueueDataPt[logQueueEnd], sizeof(logentry_t)) == SUCCESS) {
                 // Good
                 #ifdef MOTE_DEBUG_MESSAGES
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("go:");
+                        call DiagMsg.str("l:g");
                         call DiagMsg.send();
                     }
                 #endif
@@ -842,7 +972,7 @@ implementation {
                 #ifdef MOTE_DEBUG_MESSAGES
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("er:");
+                        call DiagMsg.str("l:e");
                         call DiagMsg.send();
                     }
                 #endif
@@ -868,7 +998,7 @@ implementation {
             #ifdef MOTE_DEBUG_MESSAGES
                 if (call DiagMsg.record())
                 {
-                    call DiagMsg.str("dr:");
+                    call DiagMsg.str("l:d-e");
                     call DiagMsg.send();
                 }
             #endif
@@ -878,7 +1008,7 @@ implementation {
             #ifdef MOTE_DEBUG_MESSAGES
                 if (call DiagMsg.record())
                 {
-                    call DiagMsg.str("dd:");
+                    call DiagMsg.str("l:d-d");
                     call DiagMsg.send();
                 }
             #endif

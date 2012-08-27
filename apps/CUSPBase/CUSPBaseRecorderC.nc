@@ -81,6 +81,6 @@ implementation {
   App.BatteryReadStream -> BatteryLevel; 
   App.BatteryResource -> BatteryLevel; 
 
-  App.LowPowerListening -> RF233ActiveMessageC;
+  App.LowPowerListening -> RF233TimeSyncMessageC;
 
 }
