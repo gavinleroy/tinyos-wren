@@ -46,6 +46,7 @@ typedef nx_struct serial_status_msg {
 } serial_status_msg_t;
 
 enum {
+  AM_CMD_MSG = 0x80,
   AM_CMD_SERIAL_MSG = 0x89,
   AM_RSSI_MSG = 0x6,
   AM_RSSI_SERIAL_MSG = 0x90,

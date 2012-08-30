@@ -24,6 +24,7 @@ CMD_START_SENSE = 2
 CMD_STOP_SENSE  = 3
 CMD_STATUS      = 4
 CMD_LOGSYNC     = 7
+CMD_START_BLINK = 5
 
 basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
@@ -179,6 +180,7 @@ class CmdCenter:
         print "Hit 'e' to erase"
         print "Hit 'r' to restore log"
         print "Hit 'r <nodeid>' to restore log of one specific node"
+        print "Hit 't' for Led blink"
         print "Hit 'h' for help"
 
     def main_loop(self):
@@ -278,6 +280,12 @@ class CmdCenter:
 
             elif c == 'h':
                 self.help()
+            elif c == 't':
+                # stop sensing
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_START_BLINK)
+                for n in self.m.get_nodes():
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
 
 def main():

@@ -48,6 +48,10 @@ module CUSPBaseRecorderP {
         interface Receive as SerialReceive;
         interface TimeSyncAMSend<TMilli,uint32_t> as RssiSend;
         interface Receive; // rssi receive
+        
+        interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
+        interface Receive as CMDReceive; // cmd receive
+        
         //interface Receive as Snoop[uint8_t id];
         interface SplitControl as AMControl;
         interface SplitControl as SerialControl;
@@ -73,6 +77,10 @@ module CUSPBaseRecorderP {
         interface ReadNow<uint16_t> as BatteryReadNow;
 
         interface GlobalTimeSet;
+
+#ifdef MOTE_DEBUG
+        interface DiagMsg;
+#endif                
     }
 }
 implementation {
@@ -111,10 +119,13 @@ implementation {
     message_t packet;
     message_t statuspacket;
     message_t rssipacket;
+    message_t cmdpacket;
 
     bool sensing = FALSE;
     bool rssilocked = FALSE;
     bool statuslocked = FALSE;
+    bool cmdlocked = FALSE;
+    
     uint16_t counter = 0;
     config_t conf;
     uint16_t batteryLevel = 0xffff;
@@ -367,7 +378,6 @@ implementation {
         }
     }
 
-
     event void HeartbeatTimer.fired() {
 //        uint32_t time;
 
@@ -423,6 +433,189 @@ implementation {
         call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
     }
 
+    void process_command(cmd_serial_msg_t* rcm) {
+
+        switch(rcm->cmd)
+        {
+            case CMD_DOWNLOAD:
+                //call Leds.led0Toggle();
+                if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+                    m_busy = FALSE;
+                } else {
+                    m_busy = TRUE;
+                }
+                break;
+
+            case CMD_ERASE:
+                if (call LogWrite.erase() != SUCCESS) {
+                    // handle error
+                } else {
+                    m_busy = TRUE;
+                    isErased = 1;
+                }
+                break;
+
+            case CMD_START_SENSE:
+                sensing = TRUE;
+                if(TOS_NODE_ID == TIMESYNC_NODEID) {
+                    call RandomTimer.startOneShot((call Random.rand32()%SENSING_INTERVAL));
+                } else {
+                    call RandomTimer.startOneShot(2*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
+                }
+                saveSensing(sensing);
+                if(TOS_NODE_ID != TIMESYNC_NODEID) {
+                    call SerialControl.stop();
+                }
+                
+                break;
+
+            case CMD_STOP_SENSE:
+                sensing = FALSE;
+                call SensingTimer.stop();
+                saveSensing(sensing);
+
+                break;
+
+            case CMD_STATUS:
+                sendStatus();
+                break;
+
+            case CMD_START_BLINK:
+                call Leds.led1Toggle();
+                break;
+                                
+            default:
+                break;
+        }
+
+    }
+
+    event void CMDSend.sendDone(message_t* msg, error_t err) {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_s:d");
+                call DiagMsg.send();
+            }
+        #endif
+        cmdlocked = FALSE;
+    }
+    
+    void send_command(){
+        uint32_t time;
+        time  = call GlobalTime.getLocalTime();
+
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_s:1");
+                call DiagMsg.send();
+            }
+        #endif
+
+       call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
+
+        if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_s:2");
+                call DiagMsg.send();
+            }
+        #endif
+            cmdlocked = TRUE;
+        }
+        else {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_s:e");
+                call DiagMsg.send();
+            }
+        #endif
+            
+        }
+        
+    }
+
+     event message_t * CMDReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+        uint32_t time;
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r:0");
+                call DiagMsg.send();
+            }
+        #endif
+        
+        if (len != sizeof(serial_status_msg_t)) {
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            serial_status_msg_t* rcm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
+//            serial_status_msg_t* rcm = (serial_status_msg_t*)payload;
+
+            call Leds.led2Toggle();
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r:1");
+                call DiagMsg.send();
+            }
+        #endif
+	
+	        if(!statuslocked) {
+	
+	            if (rcm == NULL) {
+	                return msg;
+	            }
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_r:2");
+                call DiagMsg.send();
+            }
+        #endif
+	
+	           //memcpy(rcm, &(m_entry.msg), m_entry.len);
+	
+	            if (call SerialStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(serial_status_msg_t)) == SUCCESS) {
+	                statuslocked = TRUE;
+			        #ifdef MOTE_DEBUG_MESSAGES
+			        
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("m_r:3");
+			                call DiagMsg.send();
+			            }
+			        #endif
+	            }
+	            else {
+			        #ifdef MOTE_DEBUG_MESSAGES
+			        
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("m_r:e");
+			                call DiagMsg.send();
+			            }
+			        #endif
+	            }
+	        }
+            
+        }
+        return msg;
+      }
+          
     event message_t* SerialReceive.receive(message_t* msg,
             void* payload, uint8_t len) {
 
@@ -431,57 +624,13 @@ implementation {
             return msg;
         }
         else {
-            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
+            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+            //cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
 
-            switch(rcm->cmd)
-            {
-                case CMD_DOWNLOAD:
-                    //call Leds.led0Toggle();
-                    if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                        m_busy = FALSE;
-                    } else {
-                        m_busy = TRUE;
-                    }
-                    break;
+            process_command(rcm);
 
-                case CMD_ERASE:
-                    if (call LogWrite.erase() != SUCCESS) {
-                        // handle error
-                    } else {
-                        m_busy = TRUE;
-                        isErased = 1;
-                    }
-                    break;
-
-                case CMD_START_SENSE:
-                    sensing = TRUE;
-                    if(TOS_NODE_ID == TIMESYNC_NODEID) {
-                        call RandomTimer.startOneShot((call Random.rand32()%SENSING_INTERVAL));
-                    } else {
-                        call RandomTimer.startOneShot(2*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
-                    }
-                    saveSensing(sensing);
-                    if(TOS_NODE_ID != TIMESYNC_NODEID) {
-                        call SerialControl.stop();
-                    }
-                    
-                    break;
-
-                case CMD_STOP_SENSE:
-                    sensing = FALSE;
-                    call SensingTimer.stop();
-                    saveSensing(sensing);
-
-                    break;
-
-                case CMD_STATUS:
-                    sendStatus();
-                    break;
-                    
-                default:
-                    break;
-            }
-
+            send_command();
+            
         }
         return msg;
     }
