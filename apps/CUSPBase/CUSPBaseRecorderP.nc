@@ -545,70 +545,14 @@ implementation {
      event message_t * CMDReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
-        uint32_t time;
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_r:0");
-                call DiagMsg.send();
-            }
-        #endif
-        
         if (len != sizeof(serial_status_msg_t)) {
             call Leds.led0Toggle();
             return msg;
         }
         else {
-            serial_status_msg_t* rcm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
-//            serial_status_msg_t* rcm = (serial_status_msg_t*)payload;
-
-            call Leds.led2Toggle();
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_r:1");
-                call DiagMsg.send();
-            }
-        #endif
-	
 	        if(!statuslocked) {
-	
-	            if (rcm == NULL) {
-	                return msg;
-	            }
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_r:2");
-                call DiagMsg.send();
-            }
-        #endif
-	
-	           //memcpy(rcm, &(m_entry.msg), m_entry.len);
-	
 	            if (call SerialStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(serial_status_msg_t)) == SUCCESS) {
 	                statuslocked = TRUE;
-			        #ifdef MOTE_DEBUG_MESSAGES
-			        
-			            if (call DiagMsg.record())
-			            {
-			                call DiagMsg.str("m_r:3");
-			                call DiagMsg.send();
-			            }
-			        #endif
-	            }
-	            else {
-			        #ifdef MOTE_DEBUG_MESSAGES
-			        
-			            if (call DiagMsg.record())
-			            {
-			                call DiagMsg.str("m_r:e");
-			                call DiagMsg.send();
-			            }
-			        #endif
 	            }
 	        }
             
@@ -619,17 +563,53 @@ implementation {
     event message_t* SerialReceive.receive(message_t* msg,
             void* payload, uint8_t len) {
 
+        uint32_t time;
+        time  = call GlobalTime.getLocalTime();
+
         if (len != sizeof(cmd_serial_msg_t)) {
             //call Leds.led1Toggle();
             return msg;
         }
         else {
-            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
-            //cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
+            //cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
 
             process_command(rcm);
 
-            send_command();
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("m_s:1");
+	                call DiagMsg.send();
+	            }
+	        #endif
+	
+	       call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
+	
+	        if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("m_s:2");
+	                call DiagMsg.send();
+	            }
+	        #endif
+	            cmdlocked = TRUE;
+	        }
+	        else {
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("m_s:e");
+	                call DiagMsg.send();
+	            }
+	        #endif
+	            
+	        }
+
             
         }
         return msg;
