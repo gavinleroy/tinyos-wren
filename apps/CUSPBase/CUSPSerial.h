@@ -13,6 +13,7 @@ typedef nx_struct rssi_msg {
 // structure of incoming serial messages
 typedef nx_struct cmd_serial_msg {
   nx_uint16_t cmd;
+  nx_uint16_t dst;
 } cmd_serial_msg_t;
 
 // structure of outgoing serial messages

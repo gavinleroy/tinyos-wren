@@ -51,6 +51,7 @@ module CUSPBaseRecorderP {
 
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
+        interface TimeSyncAMSend<TMilli,uint32_t> as RssiLogSend;
 
         interface SplitControl as SerialControl;
         interface AMSend; // serial rssi send
@@ -307,45 +308,71 @@ implementation {
     }
 
     event void LogRead.readDone(void* buf, storage_len_t len, error_t err) {
+        uint32_t time;
+        rssi_serial_msg_t* rcm;
+        
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("lr-rd:0");
+                call DiagMsg.send();
+            }
+        #endif
+
         if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
-            rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("lr-rd:1");
+	                call DiagMsg.send();
+	            }
+	        #endif
+        
+            rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
             
             memcpy(rcm, &(m_entry.msg), m_entry.len);
             
             rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
             //rcm->size = call LogRead.getSize() / sizeof(logentry_t);
 
-            #ifdef MOTE_DEBUG_LOGREAD
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("lr:");
-                    call DiagMsg.uint16(rcm->counter);
-                    call DiagMsg.uint16(rcm->dst);
-                    call DiagMsg.int8(rcm->rssi);
-                    call DiagMsg.uint16(rcm->src);
-                    call DiagMsg.uint32(rcm->srclocaltime);
-                    call DiagMsg.uint32(rcm->srcglobaltime);
-                    call DiagMsg.uint32(rcm->localtime);
-                    call DiagMsg.uint32(rcm->globaltime);
-                    call DiagMsg.uint8(rcm->isSynced);
-                    call DiagMsg.uint8(rcm->reboot);
-                    call DiagMsg.uint16(rcm->bat);
-                    call DiagMsg.uint32(rcm->size); // size
-                    call DiagMsg.send();
-                }
+            time  = call GlobalTime.getLocalTime();
 
-                call Packet.clear(&packet);
-                if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                    // Handle error.
-                }
-                            
-            #else
+/*
                 call Leds.led1On();
                 if (call AMSend.send(0, &packet, m_entry.len) != SUCCESS) {
                     // uohhh. bad bad bad
                     // retry
                 }
-            #endif
+*/
+                
+                call Leds.led1On();
+                call LowPowerListening.setRemoteWakeupInterval(&packet, REMOTE_WAKEUP_INTERVAL);
+
+                if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, m_entry.len, time) == SUCCESS) {
+		            #ifdef MOTE_DEBUG_MESSAGES
+		            
+		                if (call DiagMsg.record())
+		                {
+		                    call DiagMsg.str("rls-s:s");
+		                    call DiagMsg.send();
+		                }
+		            #endif
+                }
+                else {
+		            #ifdef MOTE_DEBUG_MESSAGES
+		            
+		                if (call DiagMsg.record())
+		                {
+		                    call DiagMsg.str("rls-s:e");
+		                    call DiagMsg.send();
+		                }
+		            #endif
+                }
+        
+//                if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
+//                }
+                
         }
         else {
             // log is empty..., set the busy flag to false
@@ -358,6 +385,8 @@ implementation {
                         
             sendStatus();
             
+            sendStatusToBase();
+            
 /* don't erase log            
             if (call LogWrite.erase() == SUCCESS) {
             // Reached to the end of log. Let's erase so that LogRead and LogWrite.currentOffset become equal
@@ -368,10 +397,38 @@ implementation {
         }
     }
 
+    event void RssiLogSend.sendDone(message_t* msg, error_t err) {
 
+#ifdef MOTE_DEBUG_MESSAGES
+    if (call DiagMsg.record())
+    {
+        call DiagMsg.str("rls-sd:1");
+        call DiagMsg.send();
+    }
+#endif
+
+        call Leds.led1Off();
+        if ( (err == SUCCESS) && (msg == &packet) ) {
+            call Packet.clear(&packet);
+            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+                // Handle error.
+		        #ifdef MOTE_DEBUG_MESSAGES
+		            if (call DiagMsg.record())
+		            {
+		                call DiagMsg.str("rls-sd:e");
+		                call DiagMsg.send();
+		            }
+		        #endif
+            }
+        }
+        else {
+            call Timer0.startOneShot(INTER_PACKET_INTERVAL);
+        }
+    }
+    
     event void AMSend.sendDone(message_t* msg, error_t err) {
 
-#ifdef MOTE_DEBUG_LOGREAD
+#ifdef MOTE_DEBUG_MESSAGES
     if (call DiagMsg.record())
     {
         call DiagMsg.str("as");
@@ -400,10 +457,18 @@ implementation {
     }
 
     event void Timer0.fired() {
-        rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
-        memcpy(rcm, &(m_entry.msg), m_entry.len);
-        rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-        call AMSend.send(0, &packet, m_entry.len);
+        uint32_t time;
+        rssi_serial_msg_t* rcm;
+        
+        time  = call GlobalTime.getLocalTime();
+        rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
+//        memcpy(rcm, &(m_entry.msg), m_entry.len);
+//        rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
+//        call AMSend.send(0, &packet, m_entry.len);
+
+        call LowPowerListening.setRemoteWakeupInterval(&packet, REMOTE_WAKEUP_INTERVAL);
+        if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
+        }      
     }
 
     event void RandomTimer.fired() {
@@ -490,32 +555,10 @@ implementation {
             
             atomic sm->bat            = batteryLevelVal;
 
-            #ifdef MOTE_DEBUG_STATUS
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("s:");
-                    call DiagMsg.uint16(sm->src);
-                    call DiagMsg.uint8(sm->sensing);
-                    call DiagMsg.uint32(sm->localtime);
-                    call DiagMsg.uint32(sm->globaltime);
-                    call DiagMsg.uint32(sm->buffersize);
-                    call DiagMsg.uint8(sm->isSynced);
-                    call DiagMsg.uint16(sm->reboots);
-                    call DiagMsg.uint16(sm->bat);
-                    call DiagMsg.uint8(sm->isErased);
-                    call DiagMsg.uint8(sm->download);
-            
-                    call DiagMsg.send();
-                }
-            #else
-                if (call SerialStatusSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t)) == SUCCESS) {
-                    statuslocked = TRUE;
-                }
-            #endif
+            if (call SerialStatusSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t)) == SUCCESS) {
+                statuslocked = TRUE;
+            }
         }
-        
-        // Send to Base
-        sendStatusToBase();
     }
 
     event void HeartbeatTimer.fired() {
@@ -576,6 +619,14 @@ implementation {
     }
 
     event void DownloadTimer.fired() {
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("dt-f:1");
+                call DiagMsg.send();
+            }
+        #endif
+                
         if (logQueueStart == logQueueEnd && !logQueueFull)
         {
             if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
@@ -610,13 +661,22 @@ implementation {
     }
 
     void process_command(cmd_serial_msg_t* rcm) {
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("pc:0");
+                call DiagMsg.uint16(rcm->cmd);
+                
+                call DiagMsg.send();
+            }
+        #endif
                 
         switch(rcm->cmd)
         {
             case CMD_DOWNLOAD:
                 download = 0;
 
-                #ifdef MOTE_DEBUG_LOGREAD
+                #ifdef MOTE_DEBUG_MESSAGES
                     if (call DiagMsg.record())
                     {
                         call DiagMsg.str("d:");
@@ -685,6 +745,10 @@ implementation {
 
             case CMD_STATUS:
                 sendStatus();
+
+		        // Send to Base
+		        sendStatusToBase();
+                
                 break;
                 
             case CMD_LOGSYNC:
@@ -738,29 +802,31 @@ implementation {
         cmdlocked = FALSE;
     }
 
-      event message_t * CMDReceive.receive(message_t *msg,
-                                void *payload,
-                                uint8_t len) {
+  event message_t * CMDReceive.receive(message_t *msg,
+                            void *payload,
+                            uint8_t len) {
 
-        if (len != sizeof(cmd_serial_msg_t)) {
-            call Leds.led0Toggle();
-            return msg;
-        }
-        else {
-            // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
-
-            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
-            
-            call Leds.led2Toggle();
-            
-            currentCommand = rcm->cmd;
-            
-            // process serial command
-            process_command(rcm);
-            
-        }
-        return msg;
-      }
+    if (call AMPacket.isForMe(msg)) {
+	    if (len != sizeof(cmd_serial_msg_t)) {
+	        call Leds.led0Toggle();
+	        return msg;
+	    }
+	    else {
+	        // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+	
+	        cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
+	        
+	        call Leds.led2Toggle();
+	        
+	        currentCommand = rcm->cmd;
+	        
+	        // process serial command
+	        process_command(rcm);
+	        
+	    }
+    }
+    return msg;
+  }
     
     event message_t* SerialReceive.receive(message_t* msg,
             void* payload, uint8_t len) {

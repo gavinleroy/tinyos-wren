@@ -43,6 +43,7 @@ class CmdCenter:
     lock = threading.RLock()
 
     f = {}
+    motes = {}
 
     def __init__(self):
         print "init"
@@ -111,6 +112,7 @@ class CmdCenter:
             #sys.stdout.write("dst: %d, src, %d, size: %d\n"%(m.get_dst(), m.get_src(), m.get_size()))
 
             if m.get_dst() not in self.f.keys():
+                sys.stdout.write(basedir+"/node_%d.log\n"%(m.get_dst()))
                 self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(m.get_dst()), "a+")
             self.f[m.get_dst()].write("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %.2f, %d\n"%(m.get_dst(), m.get_src(), m.get_counter(), m.get_rssi(), m.get_srclocaltime(), m.get_srcglobaltime(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboot(), m.get_bat()/4096.0*5, m.get_size()))
             self.f[m.get_dst()].flush()
@@ -133,6 +135,9 @@ class CmdCenter:
                 f = open(basedir+"/timesync.log", "a+")
                 f.write("%.3f, %d\n"%(time.time(), m.get_globaltime()))
                 f.close()
+            
+            if m.get_src() not in self.motes.keys():
+                self.motes[m.get_src()] = m.get_src()
 
     def checkDownload(self):
         logSize = 0
@@ -199,6 +204,7 @@ class CmdCenter:
                 # get status
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STATUS)
+                msg.set_dst(0xffff)
                 #msg.set_nodeId()
                 #msg.set_deploymentId()
                 #msg.set_syncPeriod()
@@ -234,7 +240,9 @@ class CmdCenter:
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_DOWNLOAD)
                 for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                    for dst in self.motes():
+                        msg.set_dst(dst)
+                        self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'r':
                 # restore log
                 c = raw_input("Are you sure you want to restore log? [y/n]")
@@ -261,9 +269,9 @@ class CmdCenter:
                     nodeid = int(cs[1])
                     msg = CmdSerialMsg.CmdSerialMsg()
                     msg.set_cmd(CMD_DOWNLOAD)
+                    msg.set_dst(nodeid)
                     for n in self.m.get_nodes():
-                        if nodeid == n.id:
-                            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
                 elif c[0] == 'r':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])

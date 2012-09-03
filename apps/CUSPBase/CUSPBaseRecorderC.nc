@@ -50,6 +50,7 @@ implementation {
   App.TimeSyncPacket   -> RF233TimeSyncMessageC;
 
   App.CMDReceive       -> RF233TimeSyncMessageC.Receive[AM_CMD_MSG];
+  App.RssiLogReceive   -> RF233TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
   App.CMDSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
 
   App.AMSend           -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
@@ -57,9 +58,6 @@ implementation {
   App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
   App.SerialControl    -> SAM;
   //App.Snoop -> ActiveMessageC.Snoop;
-  App.LogRead -> LogStorageC;
-  App.LogWrite -> LogStorageC;
-
   App.Config -> ConfigStorageC.ConfigStorage;
   App.Mount  -> ConfigStorageC.Mount;
 

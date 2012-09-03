@@ -54,6 +54,7 @@ implementation {
 
   App.CMDReceive       -> RF233TimeSyncMessageC.Receive[AM_CMD_MSG];
   App.CMDSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
+  App.RssiLogSend      -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_RSSI_SERIAL_MSG];
 
   App.AMSend           -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialStatusSend -> SAM.AMSend[AM_SERIAL_STATUS_MSG];

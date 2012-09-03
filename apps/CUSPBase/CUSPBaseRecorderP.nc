@@ -51,12 +51,11 @@ module CUSPBaseRecorderP {
         
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
+        interface Receive as RssiLogReceive; // log receive
         
         //interface Receive as Snoop[uint8_t id];
         interface SplitControl as AMControl;
         interface SplitControl as SerialControl;
-        interface LogRead;
-        interface LogWrite;
         interface ConfigStorage as Config;
         interface Mount as Mount;
         interface Timer<TMilli> as Timer0;
@@ -125,6 +124,7 @@ implementation {
     bool rssilocked = FALSE;
     bool statuslocked = FALSE;
     bool cmdlocked = FALSE;
+    bool amsendlocked = FALSE;
     
     uint16_t counter = 0;
     config_t conf;
@@ -250,34 +250,39 @@ implementation {
     event void SerialControl.stopDone(error_t err) {
     }
 
-    event void LogRead.readDone(void* buf, storage_len_t len, error_t err) {
-        if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
-            rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
-            memcpy(rcm, &(m_entry.msg), m_entry.len);
-            rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-            //rcm->size = call LogRead.getSize() / sizeof(logentry_t);
-            call Leds.led1On();
-            if (call AMSend.send(0, &packet, m_entry.len) != SUCCESS) {
-                // uohhh. bad bad bad
-                m_busy = FALSE;
-            }
-        }
-        else {
-            m_busy = FALSE;
-            // log is empty...
-        }
-    }
-
-
     event void AMSend.sendDone(message_t* msg, error_t err) {
         call Leds.led1Off();
-        if ( (err == SUCCESS) && (msg == &packet) ) {
-            call Packet.clear(&packet);
-            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                // Handle error.
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("am-sd:0");
+                call DiagMsg.send();
             }
+        #endif
+        if ( (err == SUCCESS) && (msg == &packet) ) {
+	        amsendlocked = FALSE;
+            call Packet.clear(&packet);
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("am-sd:s");
+	                call DiagMsg.send();
+	            }
+	        #endif
+
         }
         else {
+	        #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("am-sd:e");
+	                call DiagMsg.send();
+	            }
+	        #endif
+            
             call Timer0.startOneShot(INTER_PACKET_INTERVAL);
         }
     }
@@ -292,8 +297,6 @@ implementation {
 
     event void Timer0.fired() {
         rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
-        memcpy(rcm, &(m_entry.msg), m_entry.len);
-        rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
         call AMSend.send(0, &packet, m_entry.len);
     }
 
@@ -365,7 +368,7 @@ implementation {
             sm->localtime = time;
             sm->isSynced = call GlobalTime.local2Global(&time); 
             sm->globaltime = time;
-            sm->buffersize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
+            sm->buffersize = 0;
             sm->reboots = conf.reboot;
             sm->isErased = isErased;
             sm->download = download;
@@ -411,22 +414,6 @@ implementation {
         call Leds.led2Off();
     }
 
-    event void LogWrite.eraseDone(error_t err) {
-        if (err == SUCCESS) {
-            m_busy = FALSE;
-            isErased = 0;
-        }
-        else {
-            // Handle error.
-            isErased = 2;
-        }
-        
-        call Leds.led0Off();
-
-        conf.reboot = 0;
-        call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
-    }
-
     void saveSensing(bool sense)
     {
         conf.sensing = sense;
@@ -438,42 +425,15 @@ implementation {
         switch(rcm->cmd)
         {
             case CMD_DOWNLOAD:
-                //call Leds.led0Toggle();
-                if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                    m_busy = FALSE;
-                } else {
-                    m_busy = TRUE;
-                }
                 break;
 
             case CMD_ERASE:
-                if (call LogWrite.erase() != SUCCESS) {
-                    // handle error
-                } else {
-                    m_busy = TRUE;
-                    isErased = 1;
-                }
                 break;
 
             case CMD_START_SENSE:
-                sensing = TRUE;
-                if(TOS_NODE_ID == TIMESYNC_NODEID) {
-                    call RandomTimer.startOneShot((call Random.rand32()%SENSING_INTERVAL));
-                } else {
-                    call RandomTimer.startOneShot(2*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
-                }
-                saveSensing(sensing);
-                if(TOS_NODE_ID != TIMESYNC_NODEID) {
-                    call SerialControl.stop();
-                }
-                
                 break;
 
             case CMD_STOP_SENSE:
-                sensing = FALSE;
-                call SensingTimer.stop();
-                saveSensing(sensing);
-
                 break;
 
             case CMD_STATUS:
@@ -501,46 +461,6 @@ implementation {
         #endif
         cmdlocked = FALSE;
     }
-    
-    void send_command(){
-        uint32_t time;
-        time  = call GlobalTime.getLocalTime();
-
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_s:1");
-                call DiagMsg.send();
-            }
-        #endif
-
-       call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
-
-        if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_s:2");
-                call DiagMsg.send();
-            }
-        #endif
-            cmdlocked = TRUE;
-        }
-        else {
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_s:e");
-                call DiagMsg.send();
-            }
-        #endif
-            
-        }
-        
-    }
 
      event message_t * CMDReceive.receive(message_t *msg,
                                 void *payload,
@@ -555,6 +475,34 @@ implementation {
 	                statuslocked = TRUE;
 	            }
 	        }
+            
+        }
+        return msg;
+      }
+
+     event message_t * RssiLogReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("rlr:1");
+                call DiagMsg.send();
+            }
+        #endif
+            
+        if (len != m_entry.len) {
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            if(!amsendlocked) {
+                if (call AMSend.send(0, msg, m_entry.len) == SUCCESS) {
+                    amsendlocked = TRUE;
+                }
+            }
             
         }
         return msg;
@@ -587,7 +535,8 @@ implementation {
 	
 	       call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
 	
-	        if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+//            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+	        if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
 	        #ifdef MOTE_DEBUG_MESSAGES
 	        
 	            if (call DiagMsg.record())
@@ -653,9 +602,6 @@ implementation {
 
             m_entry.len = sizeof(rssi_serial_m);
             memcpy(&(m_entry.msg), &rssi_serial_m, m_entry.len);
-            if (call LogWrite.append(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                m_busy = FALSE;
-            }
         }
         return msg;
     }
@@ -665,19 +611,6 @@ implementation {
        return signal Receive.receive[id](msg, payload, len);
        }
        */
-
-    event void LogWrite.appendDone(void* buf, storage_len_t len, 
-            bool recordsLost, error_t err) {
-        m_busy = FALSE;
-        call Leds.led2Off();
-    }
-
-    event void LogRead.seekDone(error_t err) {
-    }
-
-    event void LogWrite.syncDone(error_t err) {
-    }
-
 
     task void setBatteryLevel()
     {
