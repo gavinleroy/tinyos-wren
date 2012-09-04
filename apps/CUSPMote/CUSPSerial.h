@@ -46,12 +46,21 @@ typedef nx_struct serial_status_msg {
      
 } serial_status_msg_t;
 
+typedef nx_struct base_status_msg {
+    nx_uint16_t src;
+    nx_uint32_t localtime;
+    nx_uint32_t globaltime;
+    nx_uint8_t isSynced;
+} base_status_msg_t;
+
 enum {
   AM_CMD_MSG = 0x80,
   AM_CMD_SERIAL_MSG = 0x89,
   AM_RSSI_MSG = 0x6,
   AM_RSSI_SERIAL_MSG = 0x90,
   AM_SERIAL_STATUS_MSG = 0x7,
+  AM_BASE_STATUS_MSG = 0x8,
+  AM_BASE_MSG = 0x60,
 };
 
 enum {
@@ -63,6 +72,7 @@ enum {
     CMD_START_BLINK = 5,
     CMD_STOP_BLINK  = 6,
     CMD_LOGSYNC     = 7,
+    CMD_BASESTATUS  = 8,
     CMD_NONE        = 9,
 };
 

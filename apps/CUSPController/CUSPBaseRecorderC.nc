@@ -44,11 +44,12 @@ implementation {
   App.RssiLogReceive   -> RF233TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
   App.CMDSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
   
-  App.BaseCMDReceive   -> RF233TimeSyncMessageC.Receive[AM_BASE_MSG];
-  App.BaseStatusSend   -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
+  App.BaseCMDSend      -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_MSG];
+  App.BaseStatusReceive -> RF233TimeSyncMessageC.Receive[AM_BASE_STATUS_MSG];
 
   App.UartSend         -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialStatusSend -> SAM.AMSend[AM_SERIAL_STATUS_MSG];
+  App.SerialBaseStatusSend -> SAM.AMSend[AM_BASE_STATUS_MSG];
   App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
   App.SerialControl    -> SAM;
   App.UartPacket       -> SAM;

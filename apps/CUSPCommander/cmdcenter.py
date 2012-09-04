@@ -19,6 +19,7 @@ from collections import deque
 import CmdSerialMsg
 import RssiSerialMsg
 import SerialStatusMsg
+import BaseStatusMsg
 
 CMD_DOWNLOAD    = 0
 CMD_ERASE       = 1
@@ -27,6 +28,7 @@ CMD_STOP_SENSE  = 3
 CMD_STATUS      = 4
 CMD_LOGSYNC     = 7
 CMD_START_BLINK = 5
+CMD_BASESTATUS  = 8
 
 basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
@@ -48,12 +50,16 @@ class CmdCenter:
     motes = {}
     moteQ = deque("")
     
+    basemsgs = {}
+    basemotes = {}
+    
     def __init__(self):
         print "init"
 
         self.dl = 0
 
         self.m = mni.MNI()
+        self.basemsgTimer = ResettableTimer(2, self.printBaseStatus)
         self.msgTimer = ResettableTimer(2, self.printStatus)
         self.downloadTimer = ResettableTimer(1, self.checkDownload)
 
@@ -90,6 +96,7 @@ class CmdCenter:
             #self.mif[n.id].addListener(self, MoteRssiMsg.MoteRssiMsg)
             self.mif[n.id].addListener(self, RssiSerialMsg.RssiSerialMsg)
             self.mif[n.id].addListener(self, SerialStatusMsg.SerialStatusMsg)
+            self.mif[n.id].addListener(self, BaseStatusMsg.BaseStatusMsg)
 
 
     def receive(self, src, msg):
@@ -148,6 +155,24 @@ class CmdCenter:
                 self.motes[m.get_src()] = m.get_src()
                 self.moteQ.append(m.get_src())
 
+        if msg.get_amType() == BaseStatusMsg.AM_TYPE:
+            with self.lock:
+                if not self.basemsgTimer.isAlive():
+                    self.basemsgTimer.start()
+                self.basemsgTimer.reset()
+
+                m = BaseStatusMsg.BaseStatusMsg(msg.dataGet())
+                self.basemsgs[m.get_src()] = m
+
+            if m.get_src() == 1:
+                # this is the base mote. Store it's time for sync in file
+                f = open(basedir+"/timesync.log", "a+")
+                f.write("%.3f, %d\n"%(time.time(), m.get_globaltime()))
+                f.close()
+            
+            if m.get_src() not in self.basemotes.keys():
+                self.basemotes[m.get_src()] = m.get_src()
+
     def startDownload(self):
         msg = CmdSerialMsg.CmdSerialMsg()
         msg.set_cmd(CMD_DOWNLOAD)
@@ -190,6 +215,15 @@ class CmdCenter:
 
         self.msgs = {}
 
+    def printBaseStatus(self):
+        basekeys = self.basemsgs.keys()
+        basekeys.sort()
+        for id in basekeys:
+            m = self.basemsgs[id]
+            sys.stdout.write("id: %4d, local: %d, global: %d, isSync: %d\n"%(m.get_src(), m.get_localtime(), m.get_globaltime(), m.get_isSynced()))
+
+        self.basemsgs = {}
+
     def printMoteQueues(self):
         for elem in self.moteQ:
             print elem
@@ -207,6 +241,7 @@ class CmdCenter:
         print "Hit 'r' to restore log"
         print "Hit 'r <nodeid>' to restore log of one specific node"
         print "Hit 't' for Led blink"
+        print "Hit 'f' to find all base stations"
         print "Hit 'h' for help"
 
     def main_loop(self):
@@ -232,6 +267,16 @@ class CmdCenter:
                 
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STATUS)
+                msg.set_dst(0xffff)
+                #msg.set_nodeId()
+                #msg.set_deploymentId()
+                #msg.set_syncPeriod()
+                for n in self.m.get_nodes():
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            elif c == 'f':
+                # get base status
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_BASESTATUS)
                 msg.set_dst(0xffff)
                 #msg.set_nodeId()
                 #msg.set_deploymentId()

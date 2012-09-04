@@ -46,6 +46,7 @@ module CUSPBaseRecorderP {
         
         interface AMSend as UartSend; // serial rssi send
         interface AMSend as SerialStatusSend; // serial status send
+        interface AMSend as SerialBaseStatusSend; //base serial status send
         interface Receive as SerialReceive;
         interface Packet as UartPacket;
         interface AMPacket as UartAMPacket;
@@ -53,8 +54,8 @@ module CUSPBaseRecorderP {
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
 
-        interface Receive as BaseCMDReceive; // base receive
-        interface TimeSyncAMSend<TMilli,uint32_t> as BaseStatusSend;
+        interface TimeSyncAMSend<TMilli,uint32_t> as BaseCMDSend;
+        interface Receive as BaseStatusReceive; // base receive
         
         interface Receive as RssiLogReceive; // log receive
         
@@ -104,7 +105,6 @@ implementation {
 
     message_t packet;
     message_t statuspacket;
-    message_t basestatuspacket;
     message_t rssipacket;
     message_t cmdpacket;
 
@@ -114,7 +114,6 @@ implementation {
     bool basestatuslocked = FALSE;
 
 	  task void uartSendTask();
-    void sendStatusToBase();
 
 	  void dropBlink() {
 	    call Leds.led2Toggle();
@@ -194,6 +193,10 @@ implementation {
         statuslocked = FALSE;
     }
 
+    event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
+        basestatuslocked = FALSE;
+    }
+
     event void Timer0.fired() {
         rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call RadioPacket.getPayload(&packet, sizeof(rssi_serial_msg_t));
         call UartSend.send(0, &packet, m_entry.len);
@@ -218,10 +221,6 @@ implementation {
             case CMD_STATUS:
                 break;
             
-            case CMD_BASESTATUS:
-                sendStatusToBase();
-                break;
-
             case CMD_START_BLINK:
                 call Leds.led1Toggle();
                 break;
@@ -232,7 +231,7 @@ implementation {
 
     }
 
-    event void BaseStatusSend.sendDone(message_t* msg, error_t err) {
+    event void BaseCMDSend.sendDone(message_t* msg, error_t err) {
         #ifdef MOTE_DEBUG_MESSAGES
         
             if (call DiagMsg.record())
@@ -241,54 +240,7 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
-        basestatuslocked = FALSE;
-    }
-
-    void sendStatusToBase()
-    {
-        uint32_t time;
-        base_status_msg_t* sm = (base_status_msg_t*)call RadioPacket.getPayload(&basestatuspacket, sizeof(base_status_msg_t));
-
-        if(!basestatuslocked) {
-
-            if (sm == NULL) {
-                return;
-            }
-            sm->src = TOS_NODE_ID;
-            time  = call GlobalTime.getLocalTime();
-            sm->localtime = time;
-            sm->isSynced = call GlobalTime.local2Global(&time); 
-            sm->globaltime = time;
-
-               call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, REMOTE_WAKEUP_INTERVAL);
-        
-                if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
-                    basestatuslocked = TRUE;
-                }
-            }
-    }
-
-     event message_t * BaseCMDReceive.receive(message_t *msg,
-                                void *payload,
-                                uint8_t len) {
-		    if (call RadioAMPacket.isForMe(msg)) {
-		        if (len != sizeof(cmd_serial_msg_t)) {
-		            call Leds.led0Toggle();
-		            return msg;
-		        }
-		        else {
-		            // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
-		    
-		            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
-		            
-		            call Leds.led2Toggle();
-		            
-		            // process serial command
-		            process_command(rcm);
-		            
-		        }
-		    }
-		    return msg;
+        cmdlocked = FALSE;
     }
 
     event void CMDSend.sendDone(message_t* msg, error_t err) {
@@ -321,6 +273,24 @@ implementation {
         return msg;
       }
 
+     event message_t * BaseStatusReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+        if (len != sizeof(base_status_msg_t)) {
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            if(!basestatuslocked) {
+                if (call SerialBaseStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(base_status_msg_t)) == SUCCESS) {
+                    basestatuslocked = TRUE;
+                }
+            }
+            
+        }
+        return msg;
+      }
+      
      event message_t * RssiLogReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
@@ -421,29 +391,57 @@ implementation {
 
 		       call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
         
+		       if (rcm->cmd == CMD_BASESTATUS) {
 	//            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-		        if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-		        #ifdef MOTE_DEBUG_MESSAGES
-		        
-		            if (call DiagMsg.record())
-		            {
-		                call DiagMsg.str("m_s:2");
-		                call DiagMsg.send();
-		            }
-		        #endif
-		            cmdlocked = TRUE;
-		        }
-		        else {
-		        #ifdef MOTE_DEBUG_MESSAGES
-		        
-		            if (call DiagMsg.record())
-		            {
-		                call DiagMsg.str("m_s:e");
-		                call DiagMsg.send();
-		            }
-		        #endif
-		            
-		        }
+	            if (call BaseCMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+	            #ifdef MOTE_DEBUG_MESSAGES
+	            
+	                if (call DiagMsg.record())
+	                {
+	                    call DiagMsg.str("b_s:2");
+	                    call DiagMsg.send();
+	                }
+	            #endif
+	                cmdlocked = TRUE;
+	            }
+	            else {
+	            #ifdef MOTE_DEBUG_MESSAGES
+	            
+	                if (call DiagMsg.record())
+	                {
+	                    call DiagMsg.str("b_s:e");
+	                    call DiagMsg.send();
+	                }
+	            #endif
+	                
+	            }
+		       }
+		       else {
+			
+			//            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+				        if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+				        #ifdef MOTE_DEBUG_MESSAGES
+				        
+				            if (call DiagMsg.record())
+				            {
+				                call DiagMsg.str("m_s:2");
+				                call DiagMsg.send();
+				            }
+				        #endif
+				            cmdlocked = TRUE;
+				        }
+				        else {
+				        #ifdef MOTE_DEBUG_MESSAGES
+				        
+				            if (call DiagMsg.record())
+				            {
+				                call DiagMsg.str("m_s:e");
+				                call DiagMsg.send();
+				            }
+				        #endif
+				            
+				        }
+		       }
         }
         return msg;
     }
