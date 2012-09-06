@@ -22,10 +22,10 @@ implementation {
   components new TimerMilliC() as Timer0;
 
   components SerialActiveMessageC as SAM;
-  components RF233ActiveMessageC;
+  components CC2420ActiveMessageC;
   
   components TimeSyncC;
-  components RF233TimeSyncMessageC;
+  components TimeSyncMessageC;
 
   MainC.SoftwareInit -> TimeSyncC;
   TimeSyncC.Boot -> MainC;
@@ -35,20 +35,21 @@ implementation {
   App.Boot -> MainC;
   App.Leds -> LedsC;
 
-  App.RadioPacket      -> RF233TimeSyncMessageC;
-  App.RadioAMPacket    -> RF233TimeSyncMessageC;
+  App.RadioPacket      -> TimeSyncMessageC;
+  App.RadioAMPacket    -> TimeSyncMessageC;
   App.RadioControl     -> ActiveMessageC;
-  App.TimeSyncPacket   -> RF233TimeSyncMessageC;
+  App.TimeSyncPacket   -> TimeSyncMessageC;
 
-  App.CMDReceive       -> RF233TimeSyncMessageC.Receive[AM_CMD_MSG];
-  App.RssiLogReceive   -> RF233TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
-  App.CMDSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
+  App.CMDReceive       -> TimeSyncMessageC.Receive[AM_CMD_MSG];
+  App.RssiLogReceive   -> TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
+  App.CMDSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
   
-  App.BaseCMDReceive   -> RF233TimeSyncMessageC.Receive[AM_BASE_MSG];
-  App.BaseStatusSend   -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
+  App.BaseCMDReceive   -> TimeSyncMessageC.Receive[AM_BASE_MSG];
+  App.BaseStatusSend   -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
 
   App.UartSend         -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialStatusSend -> SAM.AMSend[AM_SERIAL_STATUS_MSG];
+  App.SerialBaseStatusSend -> SAM.AMSend[AM_BASE_STATUS_MSG];
   App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
   App.SerialControl    -> SAM;
   App.UartPacket       -> SAM;
@@ -58,7 +59,7 @@ implementation {
   App.Timer0         -> Timer0;
   App.GlobalTime -> TimeSyncC;
 
-  App.LowPowerListening -> RF233TimeSyncMessageC;
+  App.LowPowerListening -> TimeSyncMessageC;
 
   #ifdef MOTE_DEBUG
     components DiagMsgC;

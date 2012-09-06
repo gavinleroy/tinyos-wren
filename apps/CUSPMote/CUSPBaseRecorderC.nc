@@ -26,6 +26,7 @@ implementation {
   components new TimerMilliC() as HeartbeatTimer;
   components new TimerMilliC() as LedOffTimer;
   components new TimerMilliC() as RandomTimer;
+  components new TimerMilliC() as StatusRandomTimer;
   components new TimerMilliC() as BatteryTimer;
   components new TimerMilliC() as DownloadTimer;
 
@@ -72,6 +73,7 @@ implementation {
   App.HeartbeatTimer -> HeartbeatTimer;
   App.LedOffTimer    -> LedOffTimer;
   App.RandomTimer    -> RandomTimer;
+  App.StatusRandomTimer    -> StatusRandomTimer;
   App.BatteryTimer   -> BatteryTimer;
   App.DownloadTimer  -> DownloadTimer;
   
@@ -91,6 +93,8 @@ implementation {
 
   App.LowPowerListening -> RF233TimeSyncMessageC;
 
+  App.RadioChannel -> RF233ActiveMessageC;
+  
   components Pcf2127aC;
   App.Pcf2127a -> Pcf2127aC;
   App.Pcf2127aRtc -> Pcf2127aC;

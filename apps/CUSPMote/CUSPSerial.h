@@ -14,6 +14,7 @@ typedef nx_struct rssi_msg {
 typedef nx_struct cmd_serial_msg {
   nx_uint16_t cmd;
   nx_uint16_t dst;
+  nx_uint16_t secondchannel;
 } cmd_serial_msg_t;
 
 // structure of outgoing serial messages

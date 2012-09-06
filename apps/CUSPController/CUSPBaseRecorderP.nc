@@ -45,7 +45,6 @@ module CUSPBaseRecorderP {
         interface AMPacket as RadioAMPacket;
         
         interface AMSend as UartSend; // serial rssi send
-        interface AMSend as SerialStatusSend; // serial status send
         interface AMSend as SerialBaseStatusSend; //base serial status send
         interface Receive as SerialReceive;
         interface Packet as UartPacket;
@@ -56,8 +55,6 @@ module CUSPBaseRecorderP {
 
         interface TimeSyncAMSend<TMilli,uint32_t> as BaseCMDSend;
         interface Receive as BaseStatusReceive; // base receive
-        
-        interface Receive as RssiLogReceive; // log receive
         
         //interface Receive as Snoop[uint8_t id];
         interface SplitControl as RadioControl;
@@ -149,7 +146,7 @@ implementation {
 			      radioFull = FALSE;
             m_busy = FALSE;
             // Set the local wakeup interval
-            call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
+            // call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
 
 
         }
@@ -187,10 +184,6 @@ implementation {
 	          uartFull = FALSE;
 	      }
 	    post uartSendTask();
-    }
-
-    event void SerialStatusSend.sendDone(message_t* msg, error_t err) {
-        statuslocked = FALSE;
     }
 
     event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
@@ -255,24 +248,6 @@ implementation {
         cmdlocked = FALSE;
     }
 
-     event message_t * CMDReceive.receive(message_t *msg,
-                                void *payload,
-                                uint8_t len) {
-        if (len != sizeof(serial_status_msg_t)) {
-            call Leds.led0Toggle();
-            return msg;
-        }
-        else {
-	        if(!statuslocked) {
-	            if (call SerialStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(serial_status_msg_t)) == SUCCESS) {
-	                statuslocked = TRUE;
-	            }
-	        }
-            
-        }
-        return msg;
-      }
-
      event message_t * BaseStatusReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
@@ -291,7 +266,7 @@ implementation {
         return msg;
       }
       
-     event message_t * RssiLogReceive.receive(message_t *msg,
+     event message_t * CMDReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
 	    message_t *ret = msg;
@@ -389,7 +364,7 @@ implementation {
 	            }
 	        #endif
 
-		       call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
+		       // call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
         
 		       if (rcm->cmd == CMD_BASESTATUS) {
 	//            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {

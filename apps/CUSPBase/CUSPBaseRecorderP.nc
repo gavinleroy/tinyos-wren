@@ -46,6 +46,7 @@ module CUSPBaseRecorderP {
         
         interface AMSend as UartSend; // serial rssi send
         interface AMSend as SerialStatusSend; // serial status send
+        interface AMSend as SerialBaseStatusSend; //base serial status send
         interface Receive as SerialReceive;
         interface Packet as UartPacket;
         interface AMPacket as UartAMPacket;
@@ -88,6 +89,13 @@ implementation {
         nx_uint8_t len;
         rssi_serial_msg_t msg;
     } logentry_t;
+
+    enum {
+        DEF = 0,
+        SECOND = 1,
+    };
+
+    uint8_t channel = DEF;
 
 	  message_t  uartQueueBufs[UART_QUEUE_LEN];
 	  message_t  * ONE_NOK uartQueue[UART_QUEUE_LEN];
@@ -150,7 +158,7 @@ implementation {
 			      radioFull = FALSE;
             m_busy = FALSE;
             // Set the local wakeup interval
-            call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
+            // call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
 
 
         }
@@ -194,13 +202,28 @@ implementation {
         statuslocked = FALSE;
     }
 
+    event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
+        basestatuslocked = FALSE;
+    }
+
     event void Timer0.fired() {
         rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call RadioPacket.getPayload(&packet, sizeof(rssi_serial_msg_t));
         call UartSend.send(0, &packet, m_entry.len);
     }
 
     void process_command(cmd_serial_msg_t* rcm) {
+        uint32_t time;
+        time  = call GlobalTime.getLocalTime();
 
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("pc:1");
+                call DiagMsg.send();
+            }
+        #endif
+        
         switch(rcm->cmd)
         {
             case CMD_DOWNLOAD:
@@ -226,6 +249,9 @@ implementation {
                 call Leds.led1Toggle();
                 break;
                                 
+            case CMD_NONE:
+
+                break;
             default:
                 break;
         }
@@ -260,10 +286,14 @@ implementation {
             sm->isSynced = call GlobalTime.local2Global(&time); 
             sm->globaltime = time;
 
-               call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, REMOTE_WAKEUP_INTERVAL);
-        
-                if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
+               //call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, REMOTE_WAKEUP_INTERVAL);
+                if (call SerialBaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t)) == SUCCESS) {
                     basestatuslocked = TRUE;
+                }
+                else {
+	                if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
+	                    basestatuslocked = TRUE;
+	                }
                 }
             }
     }
@@ -312,9 +342,9 @@ implementation {
         }
         else {
 	        if(!statuslocked) {
-	            if (call SerialStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(serial_status_msg_t)) == SUCCESS) {
-	                statuslocked = TRUE;
-	            }
+//	            if (call SerialStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(serial_status_msg_t)) == SUCCESS) {
+//	                statuslocked = TRUE;
+//	            }
 	        }
             
         }
@@ -444,6 +474,7 @@ implementation {
 		        #endif
 		            
 		        }
+		        
         }
         return msg;
     }

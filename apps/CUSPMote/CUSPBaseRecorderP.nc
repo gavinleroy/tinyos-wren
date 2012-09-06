@@ -71,6 +71,7 @@ module CUSPBaseRecorderP {
         interface Timer<TMilli> as RandomTimer;
         interface Timer<TMilli> as BatteryTimer;
         interface Timer<TMilli> as DownloadTimer;
+        interface Timer<TMilli> as StatusRandomTimer;
         
         interface Random;
         interface PacketField<uint8_t> as PacketRSSI;
@@ -87,6 +88,9 @@ module CUSPBaseRecorderP {
         // Real Time Clock
         interface Pcf2127a;
         interface Pcf2127aRtc;
+        
+        // MessageBufferLayerP.nc 
+        interface RadioChannel;
 
 #ifdef MOTE_DEBUG
         interface DiagMsg;
@@ -168,6 +172,7 @@ implementation {
     void sendStatus();
     void sendStatusToBase();
     void shutdown(bool all);
+    void saveSensing(bool sense);
     
     event void Boot.booted() {
         uint8_t i;
@@ -291,6 +296,30 @@ implementation {
         }
     }
 
+    event void RadioChannel.setChannelDone() {
+        if (currentCommand == CMD_DOWNLOAD) {
+		    #ifdef MOTE_DEBUG_MESSAGES
+		        if (call DiagMsg.record())
+		        {
+		            call DiagMsg.str("d:");
+		            call DiagMsg.send();
+		        }
+		    #endif
+		
+		    sensing = FALSE;
+		    smartSensingCounter = 0;
+		
+		    // Halt all including the smart sensing
+		    halt = TRUE;
+		
+		    call SensingTimer.stop();
+		    saveSensing(sensing);
+		
+		    // Wait until all queued log entires are stored into log storage                    
+		    call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
+	    }
+                
+    }
 
     event void AMControl.stopDone(error_t err) {
     }
@@ -347,7 +376,7 @@ implementation {
 */
                 
                 call Leds.led1On();
-                call LowPowerListening.setRemoteWakeupInterval(&packet, REMOTE_WAKEUP_INTERVAL);
+                // call LowPowerListening.setRemoteWakeupInterval(&packet, REMOTE_WAKEUP_INTERVAL);
 
                 if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, m_entry.len, time) == SUCCESS) {
 		            #ifdef MOTE_DEBUG_MESSAGES
@@ -532,6 +561,10 @@ implementation {
         call LedOffTimer.startOneShot(LED_INTERVAL);
     }
 
+    event void StatusRandomTimer.fired() {
+        sendStatusToBase();
+    }
+
     void sendStatus()
     {
         uint32_t time;
@@ -676,6 +709,17 @@ implementation {
             case CMD_DOWNLOAD:
                 download = 0;
 
+                // When the download command comes, then change the channel and start sending 
+                // rssi log message by using the channel
+                // First get the channel it needs to use
+                
+                /*
+                if (call RadioChannel.setChannel(rcm->secondchannel) == SUCCESS)
+                {
+                    
+                }
+                */
+                 
                 #ifdef MOTE_DEBUG_MESSAGES
                     if (call DiagMsg.record())
                     {
@@ -695,7 +739,6 @@ implementation {
 
                 // Wait until all queued log entires are stored into log storage                    
                 call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
-                
                 break;
 
             case CMD_ERASE:
@@ -744,10 +787,11 @@ implementation {
                 break;
 
             case CMD_STATUS:
-                sendStatus();
+                // sendStatus();
+                call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
 
 		        // Send to Base
-		        sendStatusToBase();
+		        // sendStatusToBase();
                 
                 break;
                 
@@ -790,7 +834,7 @@ implementation {
             
             atomic sm->bat            = batteryLevelVal;
 
-		       call LowPowerListening.setRemoteWakeupInterval(&statuspacket, REMOTE_WAKEUP_INTERVAL);
+		       //call LowPowerListening.setRemoteWakeupInterval(&statuspacket, REMOTE_WAKEUP_INTERVAL);
 		
 		        if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
 		            cmdlocked = TRUE;
@@ -1026,6 +1070,7 @@ implementation {
         call HeartbeatTimer.stop();
         call LedOffTimer.stop();
         call RandomTimer.stop();
+        call StatusRandomTimer.stop();
         call BatteryTimer.stop();
     }
 

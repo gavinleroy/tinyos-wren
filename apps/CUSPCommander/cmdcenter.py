@@ -29,6 +29,7 @@ CMD_STATUS      = 4
 CMD_LOGSYNC     = 7
 CMD_START_BLINK = 5
 CMD_BASESTATUS  = 8
+CMD_NONE        = 9
 
 basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
@@ -85,6 +86,7 @@ class CmdCenter:
         time.sleep(3)
 
         for n in self.m.get_nodes():
+            print n.id
             self.mif[n.id] = MoteIF.MoteIF()
             self.tos_source[n.id] = self.mif[n.id].addSource("sf@localhost:%d"%(20000+n.id))
 
@@ -174,12 +176,21 @@ class CmdCenter:
                 self.basemotes[m.get_src()] = m.get_src()
 
     def startDownload(self):
+        print "downloading ..."
         msg = CmdSerialMsg.CmdSerialMsg()
         msg.set_cmd(CMD_DOWNLOAD)
+        msg.set_secondchannel(16)
         dst = self.moteQ.popleft()
         msg.set_dst(dst)
-        for n in self.m.get_nodes():
-            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+        
+        basekeys = self.basemotes.keys()
+        basekeys.sort()
+        for id in basekeys:
+            print id, dst
+            self.mif[id].sendMsg(self.tos_source[id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            
+#        for n in self.m.get_nodes():
+#            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
     def checkDownload(self):
         logSize = 0
@@ -243,6 +254,7 @@ class CmdCenter:
         print "Hit 't' for Led blink"
         print "Hit 'f' to find all base stations"
         print "Hit 'h' for help"
+        print "Hit 'c' to reset channel"
 
     def main_loop(self):
 
@@ -298,6 +310,13 @@ class CmdCenter:
                 # stop sensing
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STOP_SENSE)
+                msg.set_dst(0xffff)
+                for n in self.m.get_nodes():
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            elif c == 'c':
+                # reset radio channel
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_NONE)
                 msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
