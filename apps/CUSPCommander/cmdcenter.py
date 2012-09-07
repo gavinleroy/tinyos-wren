@@ -15,6 +15,7 @@ from tinyos.message.Message import *
 from tinyos.message.SerialPacket import *
 from tinyos.packet.Serial import Serial
 from collections import deque
+from array import *
 
 import CmdSerialMsg
 import RssiSerialMsg
@@ -53,6 +54,7 @@ class CmdCenter:
     
     basemsgs = {}
     basemotes = {}
+    a = array('i', [1,2,3,4,5])
     
     def __init__(self):
         print "init"
@@ -179,14 +181,18 @@ class CmdCenter:
         print "downloading ..."
         msg = CmdSerialMsg.CmdSerialMsg()
         msg.set_cmd(CMD_DOWNLOAD)
-        msg.set_secondchannel(16)
+        msg.set_channel(16)
         dst = self.moteQ.popleft()
         msg.set_dst(dst)
         
         basekeys = self.basemotes.keys()
         basekeys.sort()
+
+#        self.mif[0].sendMsg(self.tos_source[0], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
         for id in basekeys:
             print id, dst
+#            self.mif[0].sendMsg(self.tos_source[0], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             self.mif[id].sendMsg(self.tos_source[id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             
 #        for n in self.m.get_nodes():
@@ -251,10 +257,8 @@ class CmdCenter:
         print "Hit 'e' to erase"
         print "Hit 'r' to restore log"
         print "Hit 'r <nodeid>' to restore log of one specific node"
-        print "Hit 't' for Led blink"
         print "Hit 'f' to find all base stations"
         print "Hit 'h' for help"
-        print "Hit 'c' to reset channel"
 
     def main_loop(self):
 
@@ -279,17 +283,27 @@ class CmdCenter:
                 
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STATUS)
-                msg.set_dst(0xffff)
+                msg.set_dst(102)
                 #msg.set_nodeId()
                 #msg.set_deploymentId()
                 #msg.set_syncPeriod()
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
+                msg.set_cmd(CMD_BASESTATUS)
+                msg.set_dst(102)
+                #msg.set_nodeId()
+                #msg.set_deploymentId()
+                #msg.set_syncPeriod()
+                for n in self.m.get_nodes():
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            
             elif c == 'f':
                 # get base status
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_BASESTATUS)
-                msg.set_dst(0xffff)
+                msg.set_dst(102)
+                #msg.set_dst(0xffff)
                 #msg.set_nodeId()
                 #msg.set_deploymentId()
                 #msg.set_syncPeriod()
@@ -303,21 +317,14 @@ class CmdCenter:
                     continue
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_START_SENSE)
-                msg.set_dst(0xffff)
+                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'b':
                 # stop sensing
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STOP_SENSE)
-                msg.set_dst(0xffff)
-                for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-            elif c == 'c':
-                # reset radio channel
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_NONE)
-                msg.set_dst(0xffff)
+                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'e':
@@ -327,18 +334,18 @@ class CmdCenter:
                     continue
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_ERASE)
-                msg.set_dst(0xffff)
+                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'd':
                 # start download
-                self.startDownload()
-#                msg = CmdSerialMsg.CmdSerialMsg()
-#                msg.set_cmd(CMD_DOWNLOAD)
-#                for n in self.m.get_nodes():
-#                    for dst in self.motes():
-#                        msg.set_dst(dst)
-#                        self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                #self.startDownload()
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_DOWNLOAD)
+                msg.set_dst(102)
+                msg.set_channel(16)
+                for n in self.m.get_nodes():
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'r':
                 # restore log
                 c = raw_input("Are you sure you want to restore log? [y/n]")
@@ -347,7 +354,7 @@ class CmdCenter:
                     continue
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_LOGSYNC)
-                msg.set_dst(0xffff)
+                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif len(c) > 1:
@@ -385,13 +392,6 @@ class CmdCenter:
 
             elif c == 'h':
                 self.help()
-            elif c == 't':
-                # stop sensing
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_START_BLINK)
-                msg.set_dst(0xffff)
-                for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
 
 def main():

@@ -167,12 +167,15 @@ implementation {
     bool logWriteBusy, logQueueFull;
 
     uint16_t currentCommand;
+    uint8_t currentChannel;
     
     task void logWriteTask();
     void sendStatus();
     void sendStatusToBase();
     void shutdown(bool all);
     void saveSensing(bool sense);
+    task void changeChannelTask();
+    void process_command();
     
     event void Boot.booted() {
         uint8_t i;
@@ -185,6 +188,7 @@ implementation {
         logQueueFull = TRUE;
         
         currentCommand = CMD_NONE;
+        currentChannel = RF233_DEF_CHANNEL;
         sleep = FALSE;
         messageCount = 0;
         
@@ -297,28 +301,8 @@ implementation {
     }
 
     event void RadioChannel.setChannelDone() {
-        if (currentCommand == CMD_DOWNLOAD) {
-		    #ifdef MOTE_DEBUG_MESSAGES
-		        if (call DiagMsg.record())
-		        {
-		            call DiagMsg.str("d:");
-		            call DiagMsg.send();
-		        }
-		    #endif
-		
-		    sensing = FALSE;
-		    smartSensingCounter = 0;
-		
-		    // Halt all including the smart sensing
-		    halt = TRUE;
-		
-		    call SensingTimer.stop();
-		    saveSensing(sensing);
-		
-		    // Wait until all queued log entires are stored into log storage                    
-		    call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
-	    }
-                
+        // Start downloading ...
+        process_command();
     }
 
     event void AMControl.stopDone(error_t err) {
@@ -693,18 +677,34 @@ implementation {
         }        
     }
 
-    void process_command(cmd_serial_msg_t* rcm) {
+    task void changeChannelTask() {
+        error_t err;
+        err = call RadioChannel.setChannel(currentChannel);
+        if (err == SUCCESS || err == EALREADY) {
+            call Leds.led1Toggle();
+            
+            if (err == EALREADY) {
+                signal RadioChannel.setChannelDone();
+            }
+        }
+        else {
+            call Leds.led0Toggle();
+            post changeChannelTask();
+        }
+    }
+
+    void process_command() {
         #ifdef MOTE_DEBUG_MESSAGES
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("pc:0");
-                call DiagMsg.uint16(rcm->cmd);
+                call DiagMsg.uint16(currentCommand);
                 
                 call DiagMsg.send();
             }
         #endif
-                
-        switch(rcm->cmd)
+        
+        switch(currentCommand)
         {
             case CMD_DOWNLOAD:
                 download = 0;
@@ -713,32 +713,26 @@ implementation {
                 // rssi log message by using the channel
                 // First get the channel it needs to use
                 
-                /*
-                if (call RadioChannel.setChannel(rcm->secondchannel) == SUCCESS)
-                {
-                    
-                }
-                */
-                 
-                #ifdef MOTE_DEBUG_MESSAGES
-                    if (call DiagMsg.record())
-                    {
-                        call DiagMsg.str("d:");
-                        call DiagMsg.send();
-                    }
-                #endif
-
-                sensing = FALSE;
-                smartSensingCounter = 0;
-
-                // Halt all including the smart sensing
-                halt = TRUE;
-
-                call SensingTimer.stop();
-                saveSensing(sensing);
-
-                // Wait until all queued log entires are stored into log storage                    
-                call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
+	            #ifdef MOTE_DEBUG_MESSAGES
+	                if (call DiagMsg.record())
+	                {
+	                    call DiagMsg.str("d:");
+	                    call DiagMsg.send();
+	                }
+	            #endif
+	        
+	            sensing = FALSE;
+	            smartSensingCounter = 0;
+	        
+	            // Halt all including the smart sensing
+	            halt = TRUE;
+	        
+	            call SensingTimer.stop();
+	            saveSensing(sensing);
+	        
+	            // Wait until all queued log entires are stored into log storage                    
+	            call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
+            
                 break;
 
             case CMD_ERASE:
@@ -850,6 +844,8 @@ implementation {
                             void *payload,
                             uint8_t len) {
 
+    call Leds.led1Toggle();
+
     if (call AMPacket.isForMe(msg)) {
 	    if (len != sizeof(cmd_serial_msg_t)) {
 	        call Leds.led0Toggle();
@@ -863,9 +859,14 @@ implementation {
 	        call Leds.led2Toggle();
 	        
 	        currentCommand = rcm->cmd;
-	        
-	        // process serial command
-	        process_command(rcm);
+	        currentChannel = rcm->channel;        
+	    
+	        if (currentCommand == CMD_DOWNLOAD) {    
+                post changeChannelTask();
+            }
+            else {
+	           process_command();
+	        }
 	        
 	    }
     }
@@ -885,9 +886,14 @@ implementation {
             call Leds.led2Toggle();
 
             currentCommand = rcm->cmd;
+            currentChannel = rcm->channel;        
             
-            // process serial command
-            process_command(rcm);
+            if (currentCommand == CMD_DOWNLOAD) {    
+                post changeChannelTask();
+            }
+            else {
+               process_command();
+            }
 
         }
         return msg;

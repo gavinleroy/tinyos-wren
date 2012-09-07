@@ -93,7 +93,7 @@ implementation {
 
   App.LowPowerListening -> RF233TimeSyncMessageC;
 
-  App.RadioChannel -> RF233ActiveMessageC;
+  App.RadioChannel -> ActiveMessageC;
   
   components Pcf2127aC;
   App.Pcf2127a -> Pcf2127aC;

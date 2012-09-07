@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 6
+DEFAULT_MESSAGE_SIZE = 5
 
 # The Active Message type associated with this message.
 AM_TYPE = 137
 
 class CmdSerialMsg(tinyos.message.Message.Message):
-    # Create a new CmdSerialMsg of size 6.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=6):
+    # Create a new CmdSerialMsg of size 5.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=5):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -35,11 +35,11 @@ class CmdSerialMsg(tinyos.message.Message.Message):
         except:
             pass
         try:
-            s += "  [dst=0x%x]\n" % (self.get_dst())
+            s += "  [channel=0x%x]\n" % (self.get_channel())
         except:
             pass
         try:
-            s += "  [secondchannel=0x%x]\n" % (self.get_secondchannel())
+            s += "  [dst=0x%x]\n" % (self.get_dst())
         except:
             pass
         return s
@@ -102,9 +102,64 @@ class CmdSerialMsg(tinyos.message.Message.Message):
         return 16
     
     #
+    # Accessor methods for field: channel
+    #   Field type: short
+    #   Offset (bits): 16
+    #   Size (bits): 8
+    #
+
+    #
+    # Return whether the field 'channel' is signed (False).
+    #
+    def isSigned_channel(self):
+        return False
+    
+    #
+    # Return whether the field 'channel' is an array (False).
+    #
+    def isArray_channel(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'channel'
+    #
+    def offset_channel(self):
+        return (16 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'channel'
+    #
+    def offsetBits_channel(self):
+        return 16
+    
+    #
+    # Return the value (as a short) of the field 'channel'
+    #
+    def get_channel(self):
+        return self.getUIntElement(self.offsetBits_channel(), 8, 1)
+    
+    #
+    # Set the value of the field 'channel'
+    #
+    def set_channel(self, value):
+        self.setUIntElement(self.offsetBits_channel(), 8, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'channel'
+    #
+    def size_channel(self):
+        return (8 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'channel'
+    #
+    def sizeBits_channel(self):
+        return 8
+    
+    #
     # Accessor methods for field: dst
     #   Field type: int
-    #   Offset (bits): 16
+    #   Offset (bits): 24
     #   Size (bits): 16
     #
 
@@ -124,13 +179,13 @@ class CmdSerialMsg(tinyos.message.Message.Message):
     # Return the offset (in bytes) of the field 'dst'
     #
     def offset_dst(self):
-        return (16 / 8)
+        return (24 / 8)
     
     #
     # Return the offset (in bits) of the field 'dst'
     #
     def offsetBits_dst(self):
-        return 16
+        return 24
     
     #
     # Return the value (as a int) of the field 'dst'
@@ -154,60 +209,5 @@ class CmdSerialMsg(tinyos.message.Message.Message):
     # Return the size, in bits, of the field 'dst'
     #
     def sizeBits_dst(self):
-        return 16
-    
-    #
-    # Accessor methods for field: secondchannel
-    #   Field type: int
-    #   Offset (bits): 32
-    #   Size (bits): 16
-    #
-
-    #
-    # Return whether the field 'secondchannel' is signed (False).
-    #
-    def isSigned_secondchannel(self):
-        return False
-    
-    #
-    # Return whether the field 'secondchannel' is an array (False).
-    #
-    def isArray_secondchannel(self):
-        return False
-    
-    #
-    # Return the offset (in bytes) of the field 'secondchannel'
-    #
-    def offset_secondchannel(self):
-        return (32 / 8)
-    
-    #
-    # Return the offset (in bits) of the field 'secondchannel'
-    #
-    def offsetBits_secondchannel(self):
-        return 32
-    
-    #
-    # Return the value (as a int) of the field 'secondchannel'
-    #
-    def get_secondchannel(self):
-        return self.getUIntElement(self.offsetBits_secondchannel(), 16, 1)
-    
-    #
-    # Set the value of the field 'secondchannel'
-    #
-    def set_secondchannel(self, value):
-        self.setUIntElement(self.offsetBits_secondchannel(), 16, value, 1)
-    
-    #
-    # Return the size, in bytes, of the field 'secondchannel'
-    #
-    def size_secondchannel(self):
-        return (16 / 8)
-    
-    #
-    # Return the size, in bits, of the field 'secondchannel'
-    #
-    def sizeBits_secondchannel(self):
         return 16
     

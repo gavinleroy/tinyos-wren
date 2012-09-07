@@ -59,12 +59,19 @@ module CUSPBaseRecorderP {
         //interface Receive as Snoop[uint8_t id];
         interface SplitControl as RadioControl;
         interface SplitControl as SerialControl;
+
         interface Timer<TMilli> as Timer0;
+        interface Timer<TMilli> as RandomTimer2;
+        interface Random;
+
         interface LowPowerListening;
         interface GlobalTime<TMilli>;
         interface TimeSyncPacket<TMilli,uint32_t>;
 
         interface GlobalTimeSet;
+
+        interface CC2420Packet;
+        interface CC2420Config;
 
 #ifdef MOTE_DEBUG
         interface DiagMsg;
@@ -81,7 +88,14 @@ implementation {
 		  UART_QUEUE_LEN = 12,
 		  RADIO_QUEUE_LEN = 12,
 		};
-      
+
+    enum {
+        DEF = 0,
+        SECOND = 1,
+    };
+
+    uint8_t channel = DEF;
+          
     typedef nx_struct logentry_t {
         nx_uint8_t len;
         rssi_serial_msg_t msg;
@@ -110,7 +124,12 @@ implementation {
     bool amsendlocked = FALSE;
     bool basestatuslocked = FALSE;
 
-	  task void uartSendTask();
+    uint16_t currentCommand;
+    uint8_t currentChannel;
+
+    task void changeChannelTask();
+    task void uartSendTask();
+    void sendCommand();
 
 	  void dropBlink() {
 	    call Leds.led2Toggle();
@@ -121,24 +140,28 @@ implementation {
 	  }
     
     event void Boot.booted() {
-		    uint8_t i;
-		
-		    for (i = 0; i < UART_QUEUE_LEN; i++)
-		      uartQueue[i] = &uartQueueBufs[i];
-		    uartIn = uartOut = 0;
-		    uartBusy = FALSE;
-		    uartFull = TRUE;
-		
-		    for (i = 0; i < RADIO_QUEUE_LEN; i++)
-		      radioQueue[i] = &radioQueueBufs[i];
-		    radioIn = radioOut = 0;
-		    radioBusy = FALSE;
-		    radioFull = TRUE;
-		
-		    if (call RadioControl.start() == EALREADY)
-		      radioFull = FALSE;
-		    if (call SerialControl.start() == EALREADY)
-		      uartFull = FALSE;
+	    uint8_t i;
+	
+	    for (i = 0; i < UART_QUEUE_LEN; i++)
+	      uartQueue[i] = &uartQueueBufs[i];
+	    uartIn = uartOut = 0;
+	    uartBusy = FALSE;
+	    uartFull = TRUE;
+	
+	    for (i = 0; i < RADIO_QUEUE_LEN; i++)
+	      radioQueue[i] = &radioQueueBufs[i];
+	    radioIn = radioOut = 0;
+	    radioBusy = FALSE;
+	    radioFull = TRUE;
+	
+	    if (call RadioControl.start() == EALREADY)
+	      radioFull = FALSE;
+	    if (call SerialControl.start() == EALREADY)
+	      uartFull = FALSE;
+		      
+        currentCommand = CMD_NONE;
+        currentChannel = CC2420_DEF_CHANNEL;
+		      
     }
 
     event void RadioControl.startDone(error_t err) {
@@ -162,7 +185,7 @@ implementation {
     event void SerialControl.startDone(error_t err) {
         if (err == SUCCESS) {
 			     uartFull = FALSE;
-			  }
+		  }        
         else {
             call SerialControl.start();
         }
@@ -195,35 +218,6 @@ implementation {
         call UartSend.send(0, &packet, m_entry.len);
     }
 
-    void process_command(cmd_serial_msg_t* rcm) {
-
-        switch(rcm->cmd)
-        {
-            case CMD_DOWNLOAD:
-                break;
-
-            case CMD_ERASE:
-                break;
-
-            case CMD_START_SENSE:
-                break;
-
-            case CMD_STOP_SENSE:
-                break;
-
-            case CMD_STATUS:
-                break;
-            
-            case CMD_START_BLINK:
-                call Leds.led1Toggle();
-                break;
-                                
-            default:
-                break;
-        }
-
-    }
-
     event void BaseCMDSend.sendDone(message_t* msg, error_t err) {
         #ifdef MOTE_DEBUG_MESSAGES
         
@@ -233,6 +227,21 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
+
+       if ( (err == SUCCESS) && (msg == &cmdpacket) ) {
+            call UartPacket.clear(&cmdpacket);
+        }
+        call Leds.led0Off();
+        m_busy = FALSE;
+        
+        
+        // restore old channel
+        /*
+        call CC2420Config.setChannel(CC2420_DEF_CHANNEL);
+        channel = DEF;
+        call CC2420Config.sync();
+        */
+        
         cmdlocked = FALSE;
     }
 
@@ -245,22 +254,61 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
+
+       if ( (err == SUCCESS) && (msg == &cmdpacket) ) {
+            call UartPacket.clear(&cmdpacket);
+        }
+        call Leds.led0Off();
+        m_busy = FALSE;
+
+        // restore old channel
+        /*
+        call CC2420Config.setChannel(CC2420_DEF_CHANNEL);
+        channel = DEF;
+        call CC2420Config.sync();
+         */
+               
         cmdlocked = FALSE;
     }
 
      event message_t * BaseStatusReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("bsr:1");
+                call DiagMsg.send();
+            }
+        #endif
+
         if (len != sizeof(base_status_msg_t)) {
+	       #ifdef MOTE_DEBUG_MESSAGES
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("bsr:2");
+	                call DiagMsg.send();
+	            }
+	        #endif
             call Leds.led0Toggle();
             return msg;
         }
         else {
-            if(!basestatuslocked) {
+//            if(!basestatuslocked) {
+       #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("bsr:3");
+                call DiagMsg.send();
+            }
+        #endif
                 if (call SerialBaseStatusSend.send(AM_BROADCAST_ADDR, msg, sizeof(base_status_msg_t)) == SUCCESS) {
                     basestatuslocked = TRUE;
                 }
-            }
+ //           }
             
         }
         return msg;
@@ -338,7 +386,115 @@ implementation {
 	    post uartSendTask();
 	      }
 	  }
+
+    event void CC2420Config.syncDone(error_t err) { 
+        call RandomTimer2.startOneShot((call Random.rand32()%50));
+    }
+
+    event void RandomTimer2.fired() {
+        void sendCommand();
+    }
+    
+    void sendCommand() {
+       uint32_t time;
+        time  = call GlobalTime.getLocalTime();
+
+        // set the power for this packet to high
+        call CC2420Packet.setPower(&cmdpacket, CC2420_SECOND_RFPOWER); 
+
+       // call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
+
+        switch(currentCommand)
+        {
+            case CMD_DOWNLOAD:
+                break;
+
+            case CMD_ERASE:
+                break;
+
+            case CMD_START_SENSE:
+                break;
+
+            case CMD_STOP_SENSE:
+                break;
+
+            case CMD_STATUS:
+                break;
             
+            case CMD_START_BLINK:
+                call Leds.led1Toggle();
+                break;
+                                
+            default:
+                break;
+        }
+
+       if (currentCommand == CMD_BASESTATUS) {
+            if (call BaseCMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) != SUCCESS) {
+//            if (call BaseCMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("b_s:e");
+                    call DiagMsg.send();
+                }
+            #endif
+                cmdlocked = TRUE;
+            }
+            else {
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("b_s:s");
+                    call DiagMsg.send();
+                }
+            #endif
+                
+            }
+       }
+       else {
+    
+                if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) != SUCCESS) {
+    //          if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:e");
+                        call DiagMsg.send();
+                    }
+                #endif
+                    cmdlocked = TRUE;
+                }
+                else {
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:s");
+                        call DiagMsg.send();
+                    }
+                #endif
+                    
+                }
+       }
+    }
+
+    task void changeChannelTask() {
+        call CC2420Config.setChannel(currentChannel);
+
+        if(call CC2420Config.sync() != SUCCESS) {
+            call Leds.led0Toggle();
+            post changeChannelTask();
+        }
+        else {
+            call Leds.led1Toggle();
+        }
+    }                    
+                    
     event message_t* SerialReceive.receive(message_t* msg,
             void* payload, uint8_t len) {
 
@@ -350,73 +506,29 @@ implementation {
             return msg;
         }
         else {
-            //cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+            cmd_serial_msg_t* rkcm = (cmd_serial_msg_t*)call UartPacket.getPayload(&cmdpacket, sizeof(cmd_serial_msg_t));
             cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
 
-            process_command(rcm);
-
+            rkcm->cmd   = rcm->cmd;
+            rkcm->dst   = rcm->dst;
+            rkcm->channel = rcm->channel;
+            
+            currentCommand = rcm->cmd;
+            currentChannel = rcm->channel;
+            
 	        #ifdef MOTE_DEBUG_MESSAGES
 	        
 	            if (call DiagMsg.record())
 	            {
 	                call DiagMsg.str("m_s:1");
+	                call DiagMsg.uint8(rcm->channel);
 	                call DiagMsg.send();
 	            }
 	        #endif
-
-		       // call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
-        
-		       if (rcm->cmd == CMD_BASESTATUS) {
-	//            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-	            if (call BaseCMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-	            #ifdef MOTE_DEBUG_MESSAGES
-	            
-	                if (call DiagMsg.record())
-	                {
-	                    call DiagMsg.str("b_s:2");
-	                    call DiagMsg.send();
-	                }
-	            #endif
-	                cmdlocked = TRUE;
-	            }
-	            else {
-	            #ifdef MOTE_DEBUG_MESSAGES
-	            
-	                if (call DiagMsg.record())
-	                {
-	                    call DiagMsg.str("b_s:e");
-	                    call DiagMsg.send();
-	                }
-	            #endif
-	                
-	            }
-		       }
-		       else {
-			
-			//            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-				        if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-				        #ifdef MOTE_DEBUG_MESSAGES
-				        
-				            if (call DiagMsg.record())
-				            {
-				                call DiagMsg.str("m_s:2");
-				                call DiagMsg.send();
-				            }
-				        #endif
-				            cmdlocked = TRUE;
-				        }
-				        else {
-				        #ifdef MOTE_DEBUG_MESSAGES
-				        
-				            if (call DiagMsg.record())
-				            {
-				                call DiagMsg.str("m_s:e");
-				                call DiagMsg.send();
-				            }
-				        #endif
-				            
-				        }
-		       }
+            
+            // post changeChannelTask();
+            sendCommand();
+            
         }
         return msg;
     }
