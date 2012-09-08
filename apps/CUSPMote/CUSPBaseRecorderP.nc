@@ -36,6 +36,7 @@
 */
 
 #include "CUSPSerial.h"
+#include "BQ25010.h"
 
 module CUSPBaseRecorderP {
     uses {
@@ -92,6 +93,9 @@ module CUSPBaseRecorderP {
         // MessageBufferLayerP.nc 
         interface RadioChannel;
 
+        /* Power */
+        interface BQ25010;
+        
 #ifdef MOTE_DEBUG
         interface DiagMsg;
 #endif        

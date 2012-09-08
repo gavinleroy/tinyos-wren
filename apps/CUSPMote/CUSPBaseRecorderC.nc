@@ -36,7 +36,11 @@ implementation {
   
   components RF233ActiveMessageC;
   components RF233TimeSyncMessageC;
-  components BQ25010C; // Power, Battery Charging
+  /* Power Test */
+  components BQ25010C;
+  App.BQ25010 -> BQ25010C;
+  BQ25010C.Leds -> LedsC;
+
   
   MainC.SoftwareInit -> TimeSyncC;
   TimeSyncC.Boot -> MainC;
