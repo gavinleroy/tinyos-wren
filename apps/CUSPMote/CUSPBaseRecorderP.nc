@@ -1085,7 +1085,7 @@ implementation {
         float b;
         atomic
         {
-            b = ((float)batteryLevelVal)*5/4096.0;
+            b = ((float)batteryLevelVal)*4.5/4096.0;
         }
 
         if(b > BAT_HIGH)

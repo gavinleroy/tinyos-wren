@@ -51,6 +51,8 @@ implementation {
 
   App.UartSend         -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialControl    -> SAM;
+  App.SerialBaseStatusSend -> SAM.AMSend[AM_BASE_STATUS_MSG];
+  App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
   App.UartPacket       -> SAM;
   App.UartAMPacket     -> SAM;  
   //App.Snoop -> ActiveMessageC.Snoop;

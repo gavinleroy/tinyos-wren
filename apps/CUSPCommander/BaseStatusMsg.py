@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 11
+DEFAULT_MESSAGE_SIZE = 12
 
 # The Active Message type associated with this message.
 AM_TYPE = 8
 
 class BaseStatusMsg(tinyos.message.Message.Message):
-    # Create a new BaseStatusMsg of size 11.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=11):
+    # Create a new BaseStatusMsg of size 12.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=12):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -44,6 +44,10 @@ class BaseStatusMsg(tinyos.message.Message.Message):
             pass
         try:
             s += "  [isSynced=0x%x]\n" % (self.get_isSynced())
+        except:
+            pass
+        try:
+            s += "  [channel=0x%x]\n" % (self.get_channel())
         except:
             pass
         return s
@@ -268,5 +272,60 @@ class BaseStatusMsg(tinyos.message.Message.Message):
     # Return the size, in bits, of the field 'isSynced'
     #
     def sizeBits_isSynced(self):
+        return 8
+    
+    #
+    # Accessor methods for field: channel
+    #   Field type: short
+    #   Offset (bits): 88
+    #   Size (bits): 8
+    #
+
+    #
+    # Return whether the field 'channel' is signed (False).
+    #
+    def isSigned_channel(self):
+        return False
+    
+    #
+    # Return whether the field 'channel' is an array (False).
+    #
+    def isArray_channel(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'channel'
+    #
+    def offset_channel(self):
+        return (88 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'channel'
+    #
+    def offsetBits_channel(self):
+        return 88
+    
+    #
+    # Return the value (as a short) of the field 'channel'
+    #
+    def get_channel(self):
+        return self.getUIntElement(self.offsetBits_channel(), 8, 1)
+    
+    #
+    # Set the value of the field 'channel'
+    #
+    def set_channel(self, value):
+        self.setUIntElement(self.offsetBits_channel(), 8, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'channel'
+    #
+    def size_channel(self):
+        return (8 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'channel'
+    #
+    def sizeBits_channel(self):
         return 8
     

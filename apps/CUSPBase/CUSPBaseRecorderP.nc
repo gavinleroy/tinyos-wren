@@ -45,6 +45,8 @@ module CUSPBaseRecorderP {
         interface AMPacket as RadioAMPacket;
         
         interface AMSend as UartSend; // serial rssi send
+        interface AMSend as SerialBaseStatusSend; //base serial status send
+        interface Receive as SerialReceive;
         interface Packet as UartPacket;
         interface AMPacket as UartAMPacket;
         
@@ -212,6 +214,10 @@ implementation {
 	    post uartSendTask();
     }
 
+    event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
+        basestatuslocked = FALSE;
+    }
+
     event void Timer0.fired() {
         rssi_serial_msg_t* rcm = (rssi_serial_msg_t*)call RadioPacket.getPayload(&packet, sizeof(rssi_serial_msg_t));
         call UartSend.send(0, &packet, m_entry.len);
@@ -244,10 +250,16 @@ implementation {
             sm->localtime = time;
             sm->isSynced = call GlobalTime.local2Global(&time); 
             sm->globaltime = time;
-
-           //call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, REMOTE_WAKEUP_INTERVAL);
-            if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
+            sm->channel = call CC2420Config.getChannel();
+            
+          //call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, REMOTE_WAKEUP_INTERVAL);
+            if (call SerialBaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t)) == SUCCESS) {
                 basestatuslocked = TRUE;
+            }
+            else {
+                if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
+                    basestatuslocked = TRUE;
+                }
             }
         }
     }
@@ -339,6 +351,7 @@ implementation {
             post changeChannelTask();
         }
         else {
+            sendStatusToBase();
             call Leds.led1Toggle();
         }
     }                    
@@ -367,8 +380,8 @@ implementation {
 	            currentChannel = rcm->channel;
                 currentdst     = rcm->dst;
                 
-                if (currentCommand == CMD_DOWNLOAD) { 
-                    post changeChannelTask();
+	            if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL) { 
+	                post changeChannelTask();
                 }
                 else {
                     sendCommand();
@@ -477,4 +490,36 @@ implementation {
 	    post uartSendTask();
 	      }
 	  }
+	  
+    event message_t* SerialReceive.receive(message_t* msg,
+            void* payload, uint8_t len) {
+
+        uint32_t time;
+        time  = call GlobalTime.getLocalTime();
+
+        if (len != sizeof(cmd_serial_msg_t)) {
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            cmd_serial_msg_t* rkcm = (cmd_serial_msg_t*)call UartPacket.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
+
+            rkcm->cmd   = rcm->cmd;
+            rkcm->dst   = rcm->dst;
+            rkcm->channel = rcm->channel;
+            
+            currentCommand = rcm->cmd;
+            currentChannel = rcm->channel;
+            currentdst     = rcm->dst;
+            
+            if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL) { 
+                post changeChannelTask();
+            }
+            else {
+                sendCommand();
+            } 
+        }
+        return msg;
+    }	  
 }

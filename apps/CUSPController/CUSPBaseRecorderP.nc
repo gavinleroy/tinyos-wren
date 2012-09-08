@@ -126,10 +126,12 @@ implementation {
 
     uint16_t currentCommand;
     uint8_t currentChannel;
+    uint16_t currentdst;
 
     task void changeChannelTask();
     task void uartSendTask();
     void sendCommand();
+    task void radioSendTask();
 
 	  void dropBlink() {
 	    call Leds.led2Toggle();
@@ -161,7 +163,7 @@ implementation {
 		      
         currentCommand = CMD_NONE;
         currentChannel = CC2420_DEF_CHANNEL;
-		      
+		currentdst = AM_BROADCAST_ADDR;     
     }
 
     event void RadioControl.startDone(error_t err) {
@@ -245,30 +247,20 @@ implementation {
         cmdlocked = FALSE;
     }
 
-    event void CMDSend.sendDone(message_t* msg, error_t err) {
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("m_s:d");
-                call DiagMsg.send();
-            }
-        #endif
-
-       if ( (err == SUCCESS) && (msg == &cmdpacket) ) {
-            call UartPacket.clear(&cmdpacket);
-        }
-        call Leds.led0Off();
-        m_busy = FALSE;
-
-        // restore old channel
-        /*
-        call CC2420Config.setChannel(CC2420_DEF_CHANNEL);
-        channel = DEF;
-        call CC2420Config.sync();
-         */
-               
-        cmdlocked = FALSE;
+    event void CMDSend.sendDone(message_t* msg, error_t error) {
+	    if (error != SUCCESS)
+	      failBlink();
+	    else
+	      atomic
+	    if (msg == radioQueue[radioOut])
+	      {
+	        if (++radioOut >= RADIO_QUEUE_LEN)
+	          radioOut = 0;
+	        if (radioFull)
+	          radioFull = FALSE;
+	      }
+	    
+	    post radioSendTask();
     }
 
      event message_t * BaseStatusReceive.receive(message_t *msg,
@@ -388,11 +380,11 @@ implementation {
 	  }
 
     event void CC2420Config.syncDone(error_t err) { 
-        call RandomTimer2.startOneShot((call Random.rand32()%50));
+        //call RandomTimer2.startOneShot((call Random.rand32()%50));
     }
 
     event void RandomTimer2.fired() {
-        void sendCommand();
+        //void sendCommand();
     }
     
     void sendCommand() {
@@ -404,30 +396,31 @@ implementation {
 
        // call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
 
-        switch(currentCommand)
-        {
-            case CMD_DOWNLOAD:
-                break;
-
-            case CMD_ERASE:
-                break;
-
-            case CMD_START_SENSE:
-                break;
-
-            case CMD_STOP_SENSE:
-                break;
-
-            case CMD_STATUS:
-                break;
-            
-            case CMD_START_BLINK:
-                call Leds.led1Toggle();
-                break;
-                                
-            default:
-                break;
-        }
+//        switch(currentCommand)
+//        {
+//            case CMD_DOWNLOAD:
+//                // This can be specific node that needs to be downloaded
+//                break;
+//
+//            case CMD_ERASE:
+//                break;
+//
+//            case CMD_START_SENSE:
+//                break;
+//
+//            case CMD_STOP_SENSE:
+//                break;
+//
+//            case CMD_STATUS:
+//                break;
+//            
+//            case CMD_START_BLINK:
+//                call Leds.led1Toggle();
+//                break;
+//                                
+//            default:
+//                break;
+//        }
 
        if (currentCommand == CMD_BASESTATUS) {
             if (call BaseCMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) != SUCCESS) {
@@ -455,15 +448,14 @@ implementation {
             }
        }
        else {
-    
-                if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) != SUCCESS) {
-    //          if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+            if (currentCommand == CMD_DOWNLOAD) {
+              if (call CMDSend.send(currentdst, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
 
                 #ifdef MOTE_DEBUG_MESSAGES
                 
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("m_s:e");
+                        call DiagMsg.str("m_s:e1");
                         call DiagMsg.send();
                     }
                 #endif
@@ -474,12 +466,39 @@ implementation {
                 
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("m_s:s");
+                        call DiagMsg.str("m_s:s1");
                         call DiagMsg.send();
                     }
                 #endif
                     
                 }
+            }
+            else {
+                if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) != SUCCESS) {
+    //          if (call CMDSend.send(rcm->dst, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:e2");
+                        call DiagMsg.send();
+                    }
+                #endif
+                    cmdlocked = TRUE;
+                }
+                else {
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:s2");
+                        call DiagMsg.send();
+                    }
+                #endif
+                    
+                }
+           }
        }
     }
 
@@ -498,38 +517,67 @@ implementation {
     event message_t* SerialReceive.receive(message_t* msg,
             void* payload, uint8_t len) {
 
-        uint32_t time;
-        time  = call GlobalTime.getLocalTime();
-
-        if (len != sizeof(cmd_serial_msg_t)) {
-            //call Leds.led1Toggle();
-            return msg;
-        }
-        else {
-            cmd_serial_msg_t* rkcm = (cmd_serial_msg_t*)call UartPacket.getPayload(&cmdpacket, sizeof(cmd_serial_msg_t));
-            cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
-
-            rkcm->cmd   = rcm->cmd;
-            rkcm->dst   = rcm->dst;
-            rkcm->channel = rcm->channel;
-            
-            currentCommand = rcm->cmd;
-            currentChannel = rcm->channel;
-            
-	        #ifdef MOTE_DEBUG_MESSAGES
-	        
-	            if (call DiagMsg.record())
-	            {
-	                call DiagMsg.str("m_s:1");
-	                call DiagMsg.uint8(rcm->channel);
-	                call DiagMsg.send();
-	            }
-	        #endif
-            
-            // post changeChannelTask();
-            sendCommand();
-            
-        }
-        return msg;
+	    message_t *ret = msg;
+	    bool reflectToken = FALSE;
+	
+	    atomic
+	      if (!radioFull)
+	    {
+	      reflectToken = TRUE;
+	      ret = radioQueue[radioIn];
+	      radioQueue[radioIn] = msg;
+	      if (++radioIn >= RADIO_QUEUE_LEN)
+	        radioIn = 0;
+	      if (radioIn == radioOut)
+	        radioFull = TRUE;
+	
+	      if (!radioBusy)
+	        {
+	          post radioSendTask();
+	          radioBusy = TRUE;
+	        }
+	    }
+	      else
+	    dropBlink();
+	
+	    if (reflectToken) {
+	      //call UartTokenReceive.ReflectToken(Token);
+	    }
+    
+        return ret;
     }
+    
+  task void radioSendTask() {
+    uint8_t len;
+    am_id_t id;
+    am_addr_t addr,source;
+    message_t* msg;
+
+    uint32_t time;
+    time  = call GlobalTime.getLocalTime();
+    
+    atomic
+      if (radioIn == radioOut && !radioFull)
+    {
+      radioBusy = FALSE;
+      return;
+    }
+
+    msg = radioQueue[radioOut];
+    len = call UartPacket.payloadLength(msg);
+    addr = call UartAMPacket.destination(msg);
+    source = call UartAMPacket.source(msg);
+    id = call UartAMPacket.type(msg);
+
+    call RadioPacket.clear(msg);
+    call RadioAMPacket.setSource(msg, source);
+    
+    if (call CMDSend.send(addr, msg, len, time) == SUCCESS)
+      call Leds.led0Toggle();
+    else
+      {
+    failBlink();
+    post radioSendTask();
+      }
+  }    
 }

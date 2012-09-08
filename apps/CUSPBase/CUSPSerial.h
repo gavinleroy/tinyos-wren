@@ -52,6 +52,7 @@ typedef nx_struct base_status_msg {
     nx_uint32_t localtime;
     nx_uint32_t globaltime;
     nx_uint8_t isSynced;
+	nx_uint8_t channel;
 } base_status_msg_t;
 
 enum {
@@ -75,6 +76,7 @@ enum {
     CMD_LOGSYNC     = 7,
     CMD_BASESTATUS  = 8,
     CMD_NONE        = 9,
+    CMD_CHANNEL     = 10,
 };
 
 #endif
