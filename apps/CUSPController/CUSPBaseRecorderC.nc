@@ -43,12 +43,14 @@ implementation {
   App.TimeSyncPacket   -> TimeSyncMessageC;
 
   App.CMDReceive       -> TimeSyncMessageC.Receive[AM_CMD_MSG];
+  App.WRENReceive      -> TimeSyncMessageC.Receive[AM_WREN_STATUS_MSG];
   App.CMDSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
   
   App.BaseCMDSend      -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_MSG];
   App.BaseStatusReceive -> TimeSyncMessageC.Receive[AM_BASE_STATUS_MSG];
 
   App.UartSend         -> SAM.AMSend[AM_SERIAL_STATUS_MSG];
+  App.WRENSend         -> SAM.AMSend[AM_WREN_STATUS_MSG];
   App.SerialBaseStatusSend -> SAM.AMSend[AM_BASE_STATUS_MSG];
   App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
   App.SerialControl    -> SAM;

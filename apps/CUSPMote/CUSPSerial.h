@@ -44,8 +44,13 @@ typedef nx_struct serial_status_msg {
     nx_uint16_t bat;
     nx_uint8_t isErased;
     nx_uint8_t download;
-     
+    nx_uint8_t channel;
 } serial_status_msg_t;
+
+typedef nx_struct wren_status_msg {
+    nx_uint16_t src;
+    nx_uint8_t sensing;
+} wren_status_msg_t;
 
 typedef nx_struct base_status_msg {
     nx_uint16_t src;
@@ -62,21 +67,24 @@ enum {
   AM_RSSI_SERIAL_MSG = 0x90,
   AM_SERIAL_STATUS_MSG = 0x7,
   AM_BASE_STATUS_MSG = 0x8,
+  AM_WREN_STATUS_MSG = 0x70,
   AM_BASE_MSG = 0x60,
 };
 
 enum {
-    CMD_DOWNLOAD    = 0,
-    CMD_ERASE       = 1,
-    CMD_START_SENSE = 2,
-    CMD_STOP_SENSE  = 3,
-    CMD_STATUS      = 4,
-    CMD_START_BLINK = 5,
-    CMD_STOP_BLINK  = 6,
-    CMD_LOGSYNC     = 7,
-    CMD_BASESTATUS  = 8,
-    CMD_NONE        = 9,
-    CMD_CHANNEL     = 10,    
+    CMD_DOWNLOAD        = 0,
+    CMD_ERASE           = 1,
+    CMD_START_SENSE     = 2,
+    CMD_STOP_SENSE      = 3,
+    CMD_STATUS          = 4,
+    CMD_START_BLINK     = 5,
+    CMD_STOP_BLINK      = 6,
+    CMD_LOGSYNC         = 7,
+    CMD_BASESTATUS      = 8,
+    CMD_NONE            = 9,
+    CMD_CHANNEL         = 10,
+    CMD_CHANNEL_RESET   = 11,
+    CMD_WREN_STATUS     = 12,
 };
 
 #endif

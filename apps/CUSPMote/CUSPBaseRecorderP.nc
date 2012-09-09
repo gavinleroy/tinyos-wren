@@ -53,6 +53,7 @@ module CUSPBaseRecorderP {
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
         interface TimeSyncAMSend<TMilli,uint32_t> as RssiLogSend;
+        interface TimeSyncAMSend<TMilli,uint32_t> as WRENSend;
 
         interface SplitControl as SerialControl;
         interface AMSend; // serial rssi send
@@ -73,6 +74,7 @@ module CUSPBaseRecorderP {
         interface Timer<TMilli> as BatteryTimer;
         interface Timer<TMilli> as DownloadTimer;
         interface Timer<TMilli> as StatusRandomTimer;
+        interface Timer<TMilli> as WRENRandomTimer;
         
         interface Random;
         interface PacketField<uint8_t> as PacketRSSI;
@@ -92,6 +94,7 @@ module CUSPBaseRecorderP {
         
         // MessageBufferLayerP.nc 
         interface RadioChannel;
+        interface PacketField<uint8_t> as PacketTransmitPower;
 
         /* Power */
         interface BQ25010;
@@ -145,14 +148,17 @@ implementation {
     message_t statuspacket;
     message_t rssipacket;
     message_t cmdpacket;
+    message_t wrenpacket;
 
     bool sensing = FALSE;
     bool rssilocked = FALSE;
     bool statuslocked = FALSE;
     bool cmdlocked = FALSE;
+    bool wrenlocked = FALSE;
 
     bool sleep = FALSE;
     bool halt = FALSE;
+    bool stopDownload = FALSE;
     
     uint16_t counter = 0;
     config_t conf;
@@ -176,6 +182,7 @@ implementation {
     task void logWriteTask();
     void sendStatus();
     void sendStatusToBase();
+    void sendWRENStatus();
     void shutdown(bool all);
     void saveSensing(bool sense);
     task void changeChannelTask();
@@ -427,19 +434,24 @@ implementation {
         call Leds.led1Off();
         if ( (err == SUCCESS) && (msg == &packet) ) {
             call Packet.clear(&packet);
-            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                // Handle error.
-		        #ifdef MOTE_DEBUG_MESSAGES
-		            if (call DiagMsg.record())
-		            {
-		                call DiagMsg.str("rls-sd:e");
-		                call DiagMsg.send();
-		            }
-		        #endif
-            }
+
+            if (!stopDownload) {            
+	            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+	                // Handle error.
+			        #ifdef MOTE_DEBUG_MESSAGES
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("rls-sd:e");
+			                call DiagMsg.send();
+			            }
+			        #endif
+	            }
+           }
         }
         else {
-            call Timer0.startOneShot(INTER_PACKET_INTERVAL);
+            if (!stopDownload) {
+                call Timer0.startOneShot(INTER_PACKET_INTERVAL);
+            }
         }
     }
     
@@ -553,6 +565,10 @@ implementation {
         sendStatusToBase();
     }
 
+    event void WRENRandomTimer.fired() {
+        sendWRENStatus();
+    }
+
     void sendStatus()
     {
         uint32_t time;
@@ -573,6 +589,7 @@ implementation {
             sm->reboots = conf.reboot;
             sm->isErased = isErased;
             sm->download = download;
+            sm->channel = call RadioChannel.getChannel();
             
             atomic sm->bat            = batteryLevelVal;
 
@@ -626,7 +643,9 @@ implementation {
             logQueueFull = FALSE;
             
             // let cmdcenter know that erase is finished.
-            sendStatus();
+            // sendStatus();
+            call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
+            
         }
         else {
             // Handle error.
@@ -688,8 +707,10 @@ implementation {
             call Leds.led1Toggle();
             
             if (err == EALREADY) {
-                signal RadioChannel.setChannelDone();
+                //signal RadioChannel.setChannelDone();
             }
+            
+            process_command();
         }
         else {
             call Leds.led0Toggle();
@@ -712,7 +733,8 @@ implementation {
         {
             case CMD_DOWNLOAD:
                 download = 0;
-
+                stopDownload = FALSE;
+                
                 // When the download command comes, then change the channel and start sending 
                 // rssi log message by using the channel
                 // First get the channel it needs to use
@@ -802,17 +824,48 @@ implementation {
             case CMD_START_BLINK:
                 call Leds.led1Toggle();
                 break;
+
+            case CMD_CHANNEL_RESET:
+                stopDownload = TRUE;
+                // Done before hitting here
+                break;       
+            case CMD_WREN_STATUS:
+                call WRENRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
                 
+                break;         
             default:
                 break;
         }
         
     }
 
+    void sendWRENStatus()
+    {
+        uint32_t time = call GlobalTime.getLocalTime();
+        wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
+
+        call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+
+        if(!wrenlocked) {
+
+            if (sm == NULL) {
+                return;
+            }
+            sm->src = TOS_NODE_ID;
+            sm->sensing = sensing;
+
+            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+                wrenlocked = TRUE;
+            }
+        }
+    }
+
     void sendStatusToBase()
     {
         uint32_t time;
         serial_status_msg_t* sm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
+
+        call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
 
         if(!cmdlocked) {
 
@@ -829,6 +882,7 @@ implementation {
             sm->reboots = conf.reboot;
             sm->isErased = isErased;
             sm->download = download;
+            sm->channel = call RadioChannel.getChannel();
             
             atomic sm->bat            = batteryLevelVal;
 
@@ -844,28 +898,65 @@ implementation {
         cmdlocked = FALSE;
     }
 
+    event void WRENSend.sendDone(message_t* msg, error_t err) {
+        wrenlocked = FALSE;
+    }
+
   event message_t * CMDReceive.receive(message_t *msg,
                             void *payload,
                             uint8_t len) {
-
+    cmd_serial_msg_t* rcm;
+    
     call Leds.led1Toggle();
 
+    #ifdef MOTE_DEBUG_MESSAGES
+        if (call DiagMsg.record())
+        {
+            call DiagMsg.str("cmdR:0");
+            call DiagMsg.send();
+        }
+    #endif
+
     if (call AMPacket.isForMe(msg)) {
+	    #ifdef MOTE_DEBUG_MESSAGES
+	        if (call DiagMsg.record())
+	        {
+	            call DiagMsg.str("cmdR:1");
+	            call DiagMsg.send();
+	        }
+	    #endif
+
 	    if (len != sizeof(cmd_serial_msg_t)) {
+		    #ifdef MOTE_DEBUG_MESSAGES
+		        if (call DiagMsg.record())
+		        {
+		            call DiagMsg.str("cmdR:e");
+		            call DiagMsg.send();
+		        }
+		    #endif
+	        
 	        call Leds.led0Toggle();
 	        return msg;
 	    }
 	    else {
+		    #ifdef MOTE_DEBUG_MESSAGES
+		        if (call DiagMsg.record())
+		        {
+		            call DiagMsg.str("cmdR:2");
+		            call DiagMsg.send();
+		        }
+		    #endif
+
 	        // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
 	
-	        cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
+	        rcm = (cmd_serial_msg_t*)payload;
 	        
 	        call Leds.led2Toggle();
 	        
 	        currentCommand = rcm->cmd;
 	        currentChannel = rcm->channel;        
 	    
-	        if (currentCommand == CMD_DOWNLOAD) {    
+	        if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL_RESET) {    
                 post changeChannelTask();
             }
             else {
@@ -1061,7 +1152,8 @@ implementation {
 
     event void LogWrite.syncDone(error_t err) {
         if (err == SUCCESS) {
-            sendStatus();
+            call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
+//            sendStatus();
         }
         else {
             call LogWrite.sync();
@@ -1082,6 +1174,7 @@ implementation {
         call RandomTimer.stop();
         call StatusRandomTimer.stop();
         call BatteryTimer.stop();
+        call WRENRandomTimer.stop();
     }
 
     task void setBatteryLevel()

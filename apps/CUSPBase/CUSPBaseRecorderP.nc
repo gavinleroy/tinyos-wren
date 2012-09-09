@@ -337,6 +337,33 @@ implementation {
             case CMD_NONE:
 
                 break;
+            case CMD_CHANNEL_RESET:
+               call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
+        
+                if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:2");
+                        call DiagMsg.send();
+                    }
+                #endif
+                    cmdlocked = TRUE;
+                }
+                else {
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:e");
+                        call DiagMsg.send();
+                    }
+                #endif
+                    
+                }
+                
+                break;
             default:
                 break;
         }

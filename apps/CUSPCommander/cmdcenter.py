@@ -21,17 +21,20 @@ import CmdSerialMsg
 import RssiSerialMsg
 import SerialStatusMsg
 import BaseStatusMsg
+import WRENStatusMsg
 
-CMD_DOWNLOAD    = 0
-CMD_ERASE       = 1
-CMD_START_SENSE = 2
-CMD_STOP_SENSE  = 3
-CMD_STATUS      = 4
-CMD_LOGSYNC     = 7
-CMD_START_BLINK = 5
-CMD_BASESTATUS  = 8
-CMD_NONE        = 9
-CMD_CHANNEL     = 10
+CMD_DOWNLOAD        = 0
+CMD_ERASE           = 1
+CMD_START_SENSE     = 2
+CMD_STOP_SENSE      = 3
+CMD_STATUS          = 4
+CMD_LOGSYNC         = 7
+CMD_START_BLINK     = 5
+CMD_BASESTATUS      = 8
+CMD_NONE            = 9
+CMD_CHANNEL         = 10
+CMD_CHANNEL_RESET   = 11
+CMD_WREN_STATUS     = 12
 
 basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
@@ -53,6 +56,7 @@ class CmdCenter:
     motes = []
     
     basemsgs = {}
+    wrenmsgs = {}
     basemotes = {}
     
     def __init__(self):
@@ -62,8 +66,10 @@ class CmdCenter:
 
         self.m = mni.MNI()
         self.basemsgTimer = ResettableTimer(2, self.printBaseStatus)
-        self.msgTimer = ResettableTimer(2, self.printStatus)
+        self.msgTimer = ResettableTimer(3, self.printStatus)
         self.downloadTimer = ResettableTimer(1, self.checkDownload)
+#        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
+        self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
 
         # connecting serial forwarder for all nodes
         numberOfMotes = 0
@@ -100,10 +106,11 @@ class CmdCenter:
             self.mif[n.id].addListener(self, RssiSerialMsg.RssiSerialMsg)
             self.mif[n.id].addListener(self, SerialStatusMsg.SerialStatusMsg)
             self.mif[n.id].addListener(self, BaseStatusMsg.BaseStatusMsg)
+            self.mif[n.id].addListener(self, WRENStatusMsg.WRENStatusMsg)
 
 
     def receive(self, src, msg):
-        print time.time(), msg.addr
+        #print time.time(), msg.addr
         #if msg.get_amType() == CmdSerialMsg.AM_TYPE:
         #    m = CmdSerialMsg.CmdSerialMsg(msg.dataGet())
         #    print m
@@ -156,9 +163,23 @@ class CmdCenter:
             
             # collect all client motes out there
             # print("exist", m.get_src(), self.motes.count(m.get_src()))
+            #if self.motes.count(m.get_src()) == 0:
+            #    self.motes.append(m.get_src())
+
+        if msg.get_amType() == WRENStatusMsg.AM_TYPE:
+            with self.lock:
+                if not self.wrenTimer.isAlive():
+                    self.wrenTimer.start()
+                self.wrenTimer.reset()
+
+                m = WRENStatusMsg.WRENStatusMsg(msg.dataGet())
+                self.wrenmsgs[m.get_src()] = m
+
+            # collect all client motes out there
+            # print("exist", m.get_src(), self.motes.count(m.get_src()))
             if self.motes.count(m.get_src()) == 0:
                 self.motes.append(m.get_src())
-                
+                                
         if msg.get_amType() == BaseStatusMsg.AM_TYPE:
             with self.lock:
                 if not self.basemsgTimer.isAlive():
@@ -191,33 +212,69 @@ class CmdCenter:
         # and start downloading from the base station
 
         # clear the assignment once the download is finished for the current mote
-        for key, value in self.basemotes.iteritems():
-            if value == cur:
-                self.basemotes[key] = 0
+        with self.lock:
+            for key, value in self.basemotes.iteritems(): # we can optimize this lookup
+                if value == cur:
+                    self.basemotes[key] = 0
+                    break
+
+        # If 'd' is entered again, then try to send download commands again to motes
+        if cur == 0:
+            with self.lock:
+                for key, value in self.basemotes.iteritems():
+                    if value > 0:
+                        self.sendDownloadMsg(value, key) 
+                    
 
         # So, the controller needs to know which base station is free...
         if len(self.motes) == 0:  # check to see if the client mote list is empty
             print "download finished ..."
+            # we can loop to see if the mote queue is really empty here
         else:
             print ("else")
-            for item in self.basemotes:
-                print("inside2")
-                if len(self.motes) == 0:
-                    break
-                
-                if self.basemotes[item] == 0:
-                    print ("inside3")
-                    self.basemotes[item] = self.motes.pop()
+            with self.lock:
+                for item in self.basemotes:
+                    print("inside2")
+                    if len(self.motes) == 0:
+                        # see if we have more motes for download
+                        self.queryWREN()
+                        time.sleep(3)   #give sometime to receive
+                        self.startDownload(0) #try to start download again
+                        
+                        break
                     
-                    msg = CmdSerialMsg.CmdSerialMsg()
-                    msg.set_cmd(CMD_DOWNLOAD)
-                    msg.set_dst(self.basemotes[item])
-                    msg.set_channel(item)
+                    if self.basemotes[item] == 0:
+                        print ("inside3")
+                        self.basemotes[item] = self.motes.pop()
+                        self.sendDownloadMsg(self.basemotes[item], item) 
+                                               
+#                        msg = CmdSerialMsg.CmdSerialMsg()
+#                        msg.set_cmd(CMD_DOWNLOAD)
+#                        msg.set_dst(self.basemotes[item])
+#                        msg.set_channel(item)
+#    
+#                        print (self.basemotes[item], item)
+#    
+#                        # now send command to the controller
+#                        self.mif[0].sendMsg(self.tos_source[0], self.basemotes[item], CmdSerialMsg.AM_TYPE, 0x22, msg)
+#                        print("send command ..")
+#                        time.sleep(1)
 
-                    print (self.basemotes[item], item)
-
-                    # now send command to the controller
-                    self.mif[0].sendMsg(self.tos_source[0], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+    def sendDownloadMsg(self, nodeid, channel):
+        msg = CmdSerialMsg.CmdSerialMsg()
+        msg.set_cmd(CMD_DOWNLOAD)
+        msg.set_dst(nodeid)
+        msg.set_channel(channel)
+        
+        print (nodeid, channel)
+        for n in self.m.get_nodes():
+#            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+        
+        print("send command ..")
+        time.sleep(1)
+                                
+#                    self.mif[0].sendMsg(self.tos_source[0], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             
 #        print id, dst
 
@@ -260,7 +317,10 @@ class CmdCenter:
         keys.sort()
         for id in keys:
             m = self.msgs[id]
-            sys.stdout.write("id: %4d, sensing: %d, local: %d, global: %d, isSync: %d, reboot: %d, bat: %.2f, logsize: %d, isErased: %d, download: %d,\n"%(m.get_src(), m.get_sensing(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboots(), m.get_bat()/4096.0*5, m.get_buffersize(), m.get_isErased(), m.get_download()))
+            sys.stdout.write("id: %4d, sensing: %d, local: %d, global: %d, isSync: %d, reboot: %d, bat: %.2f, logsize: %d, isErased: %d, download: %d, channel: %d,\n"%(m.get_src(), m.get_sensing(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboots(), m.get_bat()/4096.0*5, m.get_buffersize(), m.get_isErased(), m.get_download(), m.get_channel()))
+        
+        sys.stdout.write("%d messages received!\n"%(len(self.msgs)))
+        sys.stdout.flush()
 
         self.msgs = {}
 
@@ -271,22 +331,53 @@ class CmdCenter:
             m = self.basemsgs[id]
             sys.stdout.write("id: %4d, local: %d, global: %d, isSync: %d, channel: %d\n"%(m.get_src(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_channel()))
 
+        sys.stdout.write("%d messages received!\n"%(len(self.basemsgs)))
+        sys.stdout.flush()
+
         self.basemsgs = {}
+
+    def printWRENStatus(self):
+        wrenkeys = self.wrenmsgs.keys()
+        wrenkeys.sort()
+        for id in wrenkeys:
+            m = self.wrenmsgs[id]
+            sys.stdout.write("id: %4d, sensing: %d\n"%(m.get_src(), m.get_sensing()))
+
+        sys.stdout.write("%d messages received!\n"%(len(self.wrenmsgs)))
+        sys.stdout.flush()
+
+        self.wrenmsgs = {}
 
     def printMoteQueues(self):
         print "printing client motes ..."
-        for elem in self.motes:
-            print elem
+        print ("client motes:", len(self.motes))
+#        for elem in self.motes:
+#            print elem
         
         print "printing base motes ..."
         
         for elem in self.basemotes:
             print elem
-            
+
+    def queryWREN(self):
+        msg = CmdSerialMsg.CmdSerialMsg()
+        msg.set_cmd(CMD_WREN_STATUS)
+        msg.set_dst(102)
+        for n in self.m.get_nodes():
+            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
+    def queryBaseStation(self):
+        msg.set_cmd(CMD_BASESTATUS)
+        msg.set_dst(102)
+        for n in self.m.get_nodes():
+            msg.set_channel(n.id)
+            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                    
     def help(self):
 
         print "Hit 'q' to exit"
         print "Hit 's' to get status"
+        print "Hit 'w' to get wren status"
         print "Hit 's <nodeid>' to get status of one specific node"
         print "Hit 'g' to start sensing (go)"
         print "Hit 'b' to stop sensing  (break)"
@@ -298,11 +389,14 @@ class CmdCenter:
         print "Hit 'f' to find all base stations"
         print "Hit 'h' for help"
         print "Hit 'c' for channel"
+        print "Hit 'x' for radio channel reset"
 
     def main_loop(self):
 
         self.help()
-
+        
+        #self.queryWREN()
+        
         while 1:
             c = raw_input()
             if c == 'p':
@@ -317,8 +411,8 @@ class CmdCenter:
             elif c == 's':
                 # get status
                 self.f.clear()
-                del self.motes[0:len(self.motes)]
-                self.basemotes.clear()
+                #del self.motes[0:len(self.motes)]
+                #self.basemotes.clear()
                 
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STATUS)
@@ -328,18 +422,23 @@ class CmdCenter:
                 #msg.set_syncPeriod()
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-
-                msg.set_cmd(CMD_BASESTATUS)
+            elif c == 'w':
+                self.queryWREN()
+                
+                # set base channels
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_CHANNEL)
                 msg.set_dst(102)
+                #msg.set_dst(0xffff)
                 #msg.set_nodeId()
                 #msg.set_deploymentId()
                 #msg.set_syncPeriod()
                 for n in self.m.get_nodes():
                     msg.set_channel(n.id)
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-            
+
             elif c == 'f':
-                self.basemotes.clear()
+                #self.basemotes.clear()
 
                 # get base status
                 msg = CmdSerialMsg.CmdSerialMsg()
@@ -363,6 +462,30 @@ class CmdCenter:
                 #msg.set_syncPeriod()
                 for n in self.m.get_nodes():
                     msg.set_channel(n.id)
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            elif c == 'x':
+                # set base channels
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_CHANNEL_RESET)
+                msg.set_dst(102)
+                #msg.set_dst(0xffff)
+                #msg.set_nodeId()
+                #msg.set_deploymentId()
+                #msg.set_syncPeriod()
+                for n in self.m.get_nodes():
+                    msg.set_channel(11)
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            elif c == 'n':
+                # set base channels
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_STOP_DOWNLOAD)
+                msg.set_dst(102)
+                #msg.set_dst(0xffff)
+                #msg.set_nodeId()
+                #msg.set_deploymentId()
+                #msg.set_syncPeriod()
+                for n in self.m.get_nodes():
+                    msg.set_channel(11)
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'g':
                 # start sensing
@@ -433,16 +556,21 @@ class CmdCenter:
                     msg.set_cmd(CMD_STATUS)
                     msg.set_dst(nodeid)
                     for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                 elif c[0] == 'd':
                     # start download
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
+
                     msg = CmdSerialMsg.CmdSerialMsg()
                     msg.set_cmd(CMD_DOWNLOAD)
                     msg.set_dst(nodeid)
-                    for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                    msg.set_channel(16)
+                    # now send command to the controller
+                    self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+#                    for n in self.m.get_nodes():
+#                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                                        
                 elif c[0] == 'r':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
@@ -455,7 +583,7 @@ class CmdCenter:
                     msg.set_cmd(CMD_LOGSYNC)
                     msg.set_dst(nodeid)
                     for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
             elif c == 'h':
                 self.help()

@@ -29,6 +29,7 @@ implementation {
   components new TimerMilliC() as StatusRandomTimer;
   components new TimerMilliC() as BatteryTimer;
   components new TimerMilliC() as DownloadTimer;
+  components new TimerMilliC() as WRENRandomTimer;
 
   components SerialActiveMessageC as SAM;
   
@@ -59,6 +60,7 @@ implementation {
 
   App.CMDReceive       -> RF233TimeSyncMessageC.Receive[AM_CMD_MSG];
   App.CMDSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
+  App.WRENSend         -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_WREN_STATUS_MSG];
   App.RssiLogSend      -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_RSSI_SERIAL_MSG];
 
   App.AMSend           -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
@@ -80,13 +82,14 @@ implementation {
   App.StatusRandomTimer    -> StatusRandomTimer;
   App.BatteryTimer   -> BatteryTimer;
   App.DownloadTimer  -> DownloadTimer;
+  App.WRENRandomTimer -> WRENRandomTimer;
   
   components RandomC;
   App.Random -> RandomC;
   MainC.SoftwareInit -> RandomC.Init;
 
 
-  App -> RF233ActiveMessageC.PacketRSSI;
+  App.PacketRSSI -> RF233ActiveMessageC.PacketRSSI;
   App.GlobalTime -> TimeSyncC;
 
   components new MoteBatteryLevelC() as BatteryLevel; 
@@ -102,6 +105,8 @@ implementation {
   components Pcf2127aC;
   App.Pcf2127a -> Pcf2127aC;
   App.Pcf2127aRtc -> Pcf2127aC;
+
+  App.PacketTransmitPower -> RF233ActiveMessageC.PacketTransmitPower;
     
   #ifdef MOTE_DEBUG
     components DiagMsgC;

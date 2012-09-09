@@ -45,6 +45,7 @@ module CUSPBaseRecorderP {
         interface AMPacket as RadioAMPacket;
         
         interface AMSend as UartSend; // serial rssi send
+        interface AMSend as WRENSend; // serial rssi send
         interface AMSend as SerialBaseStatusSend; //base serial status send
         interface Receive as SerialReceive;
         interface Packet as UartPacket;
@@ -52,6 +53,7 @@ module CUSPBaseRecorderP {
         
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
+        interface Receive as WRENReceive; // wren receive
 
         interface TimeSyncAMSend<TMilli,uint32_t> as BaseCMDSend;
         interface Receive as BaseStatusReceive; // base receive
@@ -86,6 +88,7 @@ implementation {
 
 		enum {
 		  UART_QUEUE_LEN = 12,
+          WREN_QUEUE_LEN = 12,
 		  RADIO_QUEUE_LEN = 12,
 		};
 
@@ -106,6 +109,11 @@ implementation {
 	  uint8_t    uartIn, uartOut;
 	  bool       uartBusy, uartFull;
 	
+      message_t  wrenQueueBufs[WREN_QUEUE_LEN];
+      message_t  * ONE_NOK wrenQueue[WREN_QUEUE_LEN];
+      uint8_t    wrenIn, wrenOut;
+      bool       wrenBusy, wrenFull;
+
 	  message_t  radioQueueBufs[RADIO_QUEUE_LEN];
 	  message_t  * ONE_NOK radioQueue[RADIO_QUEUE_LEN];
 	  uint8_t    radioIn, radioOut;
@@ -130,6 +138,7 @@ implementation {
 
     task void changeChannelTask();
     task void uartSendTask();
+    task void wrenSendTask();
     void sendCommand();
     task void radioSendTask();
 
@@ -149,6 +158,12 @@ implementation {
 	    uartIn = uartOut = 0;
 	    uartBusy = FALSE;
 	    uartFull = TRUE;
+
+        for (i = 0; i < WREN_QUEUE_LEN; i++)
+          wrenQueue[i] = &wrenQueueBufs[i];
+        wrenIn = wrenOut = 0;
+        wrenBusy = FALSE;
+        wrenFull = TRUE;
 	
 	    for (i = 0; i < RADIO_QUEUE_LEN; i++)
 	      radioQueue[i] = &radioQueueBufs[i];
@@ -158,8 +173,10 @@ implementation {
 	
 	    if (call RadioControl.start() == EALREADY)
 	      radioFull = FALSE;
-	    if (call SerialControl.start() == EALREADY)
+	    if (call SerialControl.start() == EALREADY) {
 	      uartFull = FALSE;
+	      wrenFull = FALSE;
+	    }
 		      
         currentCommand = CMD_NONE;
         currentChannel = CC2420_DEF_CHANNEL;
@@ -187,6 +204,7 @@ implementation {
     event void SerialControl.startDone(error_t err) {
         if (err == SUCCESS) {
 			     uartFull = FALSE;
+			     wrenFull = FALSE;
 		  }        
         else {
             call SerialControl.start();
@@ -209,6 +227,21 @@ implementation {
 	          uartFull = FALSE;
 	      }
 	    post uartSendTask();
+    }
+
+    event void WRENSend.sendDone(message_t* msg, error_t error) {
+        if (error != SUCCESS)
+          failBlink();
+        else
+          atomic
+        if (msg == wrenQueue[wrenOut])
+          {
+            if (++wrenOut >= WREN_QUEUE_LEN)
+              wrenOut = 0;
+            if (wrenFull)
+              wrenFull = FALSE;
+          }
+        post wrenSendTask();
     }
 
     event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
@@ -345,6 +378,45 @@ implementation {
 	
 	  }
 
+     event message_t * WRENReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+        message_t *ret = msg;
+    
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("wrr:1");
+                call DiagMsg.send();
+            }
+        #endif
+        
+            atomic {
+              if (!wrenFull)
+            {
+              ret = wrenQueue[wrenIn];
+              wrenQueue[wrenIn] = msg;
+        
+              wrenIn = (wrenIn + 1) % WREN_QUEUE_LEN;
+            
+              if (wrenIn == wrenOut)
+                wrenFull = TRUE;
+        
+              if (!wrenBusy)
+                {
+                  post wrenSendTask();
+                  wrenBusy = TRUE;
+                }
+            }
+              else
+            dropBlink();
+            }
+            
+            return ret;
+    
+      }
+
 	  uint8_t tmpLen;
 
 	  task void uartSendTask() {
@@ -379,6 +451,37 @@ implementation {
 	      }
 	  }
 
+      task void wrenSendTask() {
+        uint8_t len;
+        am_id_t id;
+        am_addr_t addr, src;
+        message_t* msg;
+        am_group_t grp;
+        atomic
+          if (wrenIn == wrenOut && !wrenFull)
+        {
+          wrenBusy = FALSE;
+          return;
+        }
+    
+        msg = wrenQueue[wrenOut];
+        tmpLen = len = call RadioPacket.payloadLength(msg);
+        id = call RadioAMPacket.type(msg);
+        addr = call RadioAMPacket.destination(msg);
+        src = call RadioAMPacket.source(msg);
+        grp = call RadioAMPacket.group(msg);
+        call UartPacket.clear(msg);
+        call UartAMPacket.setSource(msg, src);
+        call UartAMPacket.setGroup(msg, grp);
+    
+        if (call WRENSend.send(addr, wrenQueue[wrenOut], len) == SUCCESS)
+          call Leds.led1Toggle();
+        else
+          {
+        failBlink();
+        post wrenSendTask();
+          }
+      }
     event void CC2420Config.syncDone(error_t err) { 
         //call RandomTimer2.startOneShot((call Random.rand32()%50));
     }
@@ -520,6 +623,15 @@ implementation {
 	    message_t *ret = msg;
 	    bool reflectToken = FALSE;
 	
+    #ifdef MOTE_DEBUG_MESSAGES
+    
+        if (call DiagMsg.record())
+        {
+            call DiagMsg.str("srr:1");
+            call DiagMsg.send();
+        }
+    #endif
+
 	    atomic
 	      if (!radioFull)
 	    {
@@ -555,6 +667,15 @@ implementation {
 
     uint32_t time;
     time  = call GlobalTime.getLocalTime();
+
+    #ifdef MOTE_DEBUG_MESSAGES
+    
+        if (call DiagMsg.record())
+        {
+            call DiagMsg.str("rst:1");
+            call DiagMsg.send();
+        }
+    #endif
     
     atomic
       if (radioIn == radioOut && !radioFull)
@@ -572,10 +693,29 @@ implementation {
     call RadioPacket.clear(msg);
     call RadioAMPacket.setSource(msg, source);
     
+    #ifdef MOTE_DEBUG_MESSAGES
+    
+        if (call DiagMsg.record())
+        {
+            call DiagMsg.str("rst:2");
+            call DiagMsg.uint16(addr);
+            call DiagMsg.send();
+        }
+    #endif
+
+    call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
     if (call CMDSend.send(addr, msg, len, time) == SUCCESS)
       call Leds.led0Toggle();
     else
       {
+	    #ifdef MOTE_DEBUG_MESSAGES
+	    
+	        if (call DiagMsg.record())
+	        {
+	            call DiagMsg.str("rst:e");
+	            call DiagMsg.send();
+	        }
+	    #endif
     failBlink();
     post radioSendTask();
       }
