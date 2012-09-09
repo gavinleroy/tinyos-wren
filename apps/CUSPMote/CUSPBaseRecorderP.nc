@@ -844,7 +844,7 @@ implementation {
         uint32_t time = call GlobalTime.getLocalTime();
         wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
 
-        call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+//        call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
 
         if(!wrenlocked) {
 
@@ -865,7 +865,7 @@ implementation {
         uint32_t time;
         serial_status_msg_t* sm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
 
-        call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
+//        call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
 
         if(!cmdlocked) {
 
@@ -1012,6 +1012,14 @@ implementation {
             return msg;
         }
 
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("rec:1");
+                call DiagMsg.send();
+            }
+        #endif
+            
         atomic {
             messageCount++;
             
@@ -1043,6 +1051,15 @@ implementation {
                         call RandomTimer.startOneShot(2*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
                         return msg;
                     }
+
+			        #ifdef MOTE_DEBUG_MESSAGES
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("rec:2");
+			                call DiagMsg.uint16(rssim->src);
+			                call DiagMsg.send();
+			            }
+			        #endif
                     
                     rssi_serial_m.counter        = rssim->counter;
                     rssi_serial_m.dst            = TOS_NODE_ID;
