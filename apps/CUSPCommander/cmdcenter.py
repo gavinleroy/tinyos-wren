@@ -377,7 +377,7 @@ class CmdCenter:
 
         print "Hit 'q' to exit"
         print "Hit 's' to get status"
-        print "Hit 'w' to get ready for download"
+        #print "Hit 'w' to get ready for download"
         print "Hit 's <nodeid>' to get status of one specific node"
         print "Hit 'g' to start sensing (go)"
         print "Hit 'b' to stop sensing  (break)"
@@ -466,6 +466,10 @@ class CmdCenter:
             elif c == 'd':
                 # start download
                 # stop all motes first
+                self.queryWREN()
+                self.setDownloadBaseStationChannel()
+
+                time.sleep(3) #give sometime to settle down                
                 self.stopSensing()
 #                # get the first group of motes for download and set channels for base stations
 #                self.queryWREN()
