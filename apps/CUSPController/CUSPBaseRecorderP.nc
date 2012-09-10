@@ -188,7 +188,7 @@ implementation {
 			      radioFull = FALSE;
             m_busy = FALSE;
             // Set the local wakeup interval
-            // call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
+            call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
 
 
         }

@@ -862,6 +862,7 @@ implementation {
 	
 	//            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	            // 0 address: Controller
+                call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 0);
 	            if (call WRENSend.send(0, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	                wrenlocked = TRUE;
 	            }
