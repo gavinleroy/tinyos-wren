@@ -497,7 +497,7 @@ implementation {
         // set the power for this packet to high
         call CC2420Packet.setPower(&cmdpacket, CC2420_SECOND_RFPOWER); 
 
-       // call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
+       call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
 
 //        switch(currentCommand)
 //        {

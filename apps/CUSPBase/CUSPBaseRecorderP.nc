@@ -252,11 +252,11 @@ implementation {
             sm->globaltime = time;
             sm->channel = call CC2420Config.getChannel();
             
-          //call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, REMOTE_WAKEUP_INTERVAL);
             if (call SerialBaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t)) == SUCCESS) {
                 basestatuslocked = TRUE;
             }
             else {
+	            call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, 0);
                 if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
                     basestatuslocked = TRUE;
                 }

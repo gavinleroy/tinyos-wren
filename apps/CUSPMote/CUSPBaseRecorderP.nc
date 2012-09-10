@@ -178,6 +178,7 @@ implementation {
 
     uint16_t currentCommand;
     uint8_t currentChannel;
+    uint16_t currentdst;
     
     task void logWriteTask();
     void sendStatus();
@@ -200,6 +201,8 @@ implementation {
         
         currentCommand = CMD_NONE;
         currentChannel = RF233_DEF_CHANNEL;
+        currentdst = AM_BROADCAST_ADDR; //default download base station in case
+        
         sleep = FALSE;
         messageCount = 0;
         
@@ -374,7 +377,7 @@ implementation {
                 
                 call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
 
-                if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, m_entry.len, time) == SUCCESS) {
+                if (call RssiLogSend.send(currentdst, &packet, m_entry.len, time) == SUCCESS) {
 		            #ifdef MOTE_DEBUG_MESSAGES
 		            
 		                if (call DiagMsg.record())
@@ -497,7 +500,7 @@ implementation {
 //        call AMSend.send(0, &packet, m_entry.len);
 
         call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
-        if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
+        if (call RssiLogSend.send(currentdst, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
         }      
     }
 
@@ -608,7 +611,8 @@ implementation {
         if(TOS_NODE_ID == TIMESYNC_NODEID)
         {
             // we should send a status update to keep time.
-            sendStatus();
+            // sendStatus();
+            sendStatusToBase();
 
         }
         
@@ -842,22 +846,26 @@ implementation {
 
     void sendWRENStatus()
     {
-        uint32_t time = call GlobalTime.getLocalTime();
-        wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
-
-//        call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
-
-        if(!wrenlocked) {
-
-            if (sm == NULL) {
-                return;
-            }
-            sm->src = TOS_NODE_ID;
-            sm->sensing = sensing;
-
-            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-                wrenlocked = TRUE;
-            }
+        if(TOS_NODE_ID != TIMESYNC_NODEID) {
+	        uint32_t time = call GlobalTime.getLocalTime();
+	        wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
+	
+	//        call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+	
+	        if(!wrenlocked) {
+	
+	            if (sm == NULL) {
+	                return;
+	            }
+	            sm->src = TOS_NODE_ID;
+	            sm->sensing = sensing;
+	
+	//            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+	            // 0 address: Controller
+	            if (call WRENSend.send(0, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+	                wrenlocked = TRUE;
+	            }
+	        }
         }
     }
 
@@ -889,7 +897,8 @@ implementation {
 
 		        call LowPowerListening.setRemoteWakeupInterval(&statuspacket, 0);
 		
-		        if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
+//                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
+		        if (call CMDSend.send(0, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
 		            cmdlocked = TRUE;
 		        }
 	        }
@@ -956,7 +965,8 @@ implementation {
 	        
 	        currentCommand = rcm->cmd;
 	        currentChannel = rcm->channel;        
-	    
+	        currentdst = rcm->dst;
+	        
 	        if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL_RESET) {    
                 post changeChannelTask();
             }
@@ -983,6 +993,7 @@ implementation {
 
             currentCommand = rcm->cmd;
             currentChannel = rcm->channel;        
+            currentdst = rcm->dst;
             
             if (currentCommand == CMD_DOWNLOAD) {    
                 post changeChannelTask();

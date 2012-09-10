@@ -90,7 +90,7 @@ implementation {
 
     enum {
         CONFIG_ADDR = 0,
-        CONFIG_VERSION = 4,
+        CONFIG_VERSION = 7,
     };
 
     enum {
@@ -161,14 +161,14 @@ implementation {
         if (err == SUCCESS) {
             memcpy(&conf, buf, len);
             if (conf.version == CONFIG_VERSION) {
-                // do we have to start sensing?
-                if (conf.sensing)
-                {
+                // do we have to start sensing? This is a sleep sensor. Just start
+//                if (conf.sensing)
+//                {
                     sensing = TRUE;
                     call RandomTimer.startOneShot((call Random.rand32()%SENSING_INTERVAL));
-                } else {
-                    sensing = FALSE;
-                }
+//                } else {
+//                    sensing = FALSE;
+//                }
                 conf.reboot += 1;
                 // restore global time
 //                call GlobalTimeSet.set(conf.globaltime);
@@ -177,7 +177,7 @@ implementation {
                 // Version mismatch. Restore default.
                 call Leds.led1On();
                 conf.version    = CONFIG_VERSION;
-                conf.sensing    = DEFAULT_SENSING;
+                conf.sensing    = TRUE;
                 conf.globaltime = DEFAULT_GLOBALTIME;
                 conf.reboot     = DEFAULT_REBOOT;
             }
@@ -358,6 +358,7 @@ implementation {
             sm->reboots = conf.reboot;
             sm->isErased = isErased;
             sm->download = download;
+            sm->channel = CC2420_DEF_CHANNEL;
             
            	atomic sm->bat            = batteryLevelVal;
 

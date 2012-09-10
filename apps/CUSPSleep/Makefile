@@ -1,7 +1,7 @@
 COMPONENT=CUSPBaseRecorderC
 
-BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py
-CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py
+BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py
+CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py
 
 CmdSerialMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=CmdSerialMsg CUSPSerial.h cmd_serial_msg -o $@
@@ -12,13 +12,21 @@ RssiSerialMsg.py: CUSPSerial.h
 SerialStatusMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=SerialStatusMsg CUSPSerial.h serial_status_msg -o $@
 
+BaseStatusMsg.py: CUSPSerial.h
+	    mig python -target=null $(CFLAGS) -python-classname=BaseStatusMsg CUSPSerial.h base_status_msg -o $@
+
+WRENStatusMsg.py: CUSPSerial.h
+	    mig python -target=null $(CFLAGS) -python-classname=WRENStatusMsg CUSPSerial.h wren_status_msg -o $@
+
 PFLAGS += -DTIMESYNC_RATE=10
 
 PFLAGS += -I$(TOSDIR)/lib/ftsp
+PFLAGS += -I$(TOSDIR)/lib/diagmsg
 
 CFLAGS += -DCC2420_DEF_CHANNEL=11
 
-#CFLAGS += -DCC2420_DEF_RFPOWER=2
+CFLAGS += -DCC2420_DEF_RFPOWER=31
+CFLAGS += -DCC2420_SECOND_RFPOWER=31
 
 CFLAGS += -DLOW_POWER_LISTENING
 CFLAGS += -DLPL_INTERVAL=512
@@ -40,4 +48,13 @@ CFLAGS += -DBAT_MID_INTERVAL=5000
 CFLAGS += -DBAT_LOW=2.0
 CFLAGS += -DBAT_LOW_INTERVAL=1000
 
+# ==== DEBUG PARAMETERS ====== 
+#CFLAGS += -DDIAGMSG_SERIAL_START
+CFLAGS += -DMOTE_DEBUG
+#CFLAGS += -DMOTE_DEBUG_LOGREAD
+#CFLAGS += -DMOTE_DEBUG_STATUS
+CFLAGS += -DMOTE_DEBUG_MESSAGES
+#CFLAGS += -DMOTE_DEBUG_QUEUE
+CFLAGS += -DMOTE_DEBUG_MOTECOUNTING
+# ============================
 include $(MAKERULES)
