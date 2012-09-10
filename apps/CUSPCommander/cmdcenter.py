@@ -131,7 +131,7 @@ class CmdCenter:
                     sys.stdout.flush()
                 self.dl += 1
 
-            sys.stdout.write("dst: %d, src, %d, c: %d, rssi, %d, sloc: %d, sglob: %d, dstloc: %d, dstglob: %d, Sync: %d, reboot: %d, bat: %.2f, size: %d\n"%(m.get_dst(), m.get_src(), m.get_counter(), m.get_rssi(), m.get_srclocaltime(), m.get_srcglobaltime(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboot(), m.get_bat()/4096.0*5, m.get_size()))
+            #sys.stdout.write("dst: %d, src, %d, c: %d, rssi, %d, sloc: %d, sglob: %d, dstloc: %d, dstglob: %d, Sync: %d, reboot: %d, bat: %.2f, size: %d\n"%(m.get_dst(), m.get_src(), m.get_counter(), m.get_rssi(), m.get_srclocaltime(), m.get_srcglobaltime(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboot(), m.get_bat()/4096.0*5, m.get_size()))
             #sys.stdout.write("dst: %d, src, %d, size: %d\n"%(m.get_dst(), m.get_src(), m.get_size()))
 
             if m.get_dst() not in self.f.keys():
@@ -272,7 +272,7 @@ class CmdCenter:
             self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
         
         print("send command ..")
-        time.sleep(1)
+        #time.sleep(1)
                                 
 #                    self.mif[0].sendMsg(self.tos_source[0], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             
@@ -524,6 +524,12 @@ class CmdCenter:
 #                    assignment[basemote] = mote_list[index]
 #                    index += 1
                     
+                # stop all motes first
+                msg = CmdSerialMsg.CmdSerialMsg()
+                msg.set_cmd(CMD_STOP_SENSE)
+                #msg.set_dst(0xffff)
+                for n in self.m.get_nodes():
+                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
                 
                 # start download now
                 

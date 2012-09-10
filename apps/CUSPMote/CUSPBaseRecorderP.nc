@@ -371,7 +371,8 @@ implementation {
 */
                 
                 call Leds.led1On();
-                // call LowPowerListening.setRemoteWakeupInterval(&packet, REMOTE_WAKEUP_INTERVAL);
+                
+                call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
 
                 if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, m_entry.len, time) == SUCCESS) {
 		            #ifdef MOTE_DEBUG_MESSAGES
@@ -495,7 +496,7 @@ implementation {
 //        rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
 //        call AMSend.send(0, &packet, m_entry.len);
 
-        call LowPowerListening.setRemoteWakeupInterval(&packet, REMOTE_WAKEUP_INTERVAL);
+        call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
         if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
         }      
     }
@@ -886,7 +887,7 @@ implementation {
             
             atomic sm->bat            = batteryLevelVal;
 
-		       //call LowPowerListening.setRemoteWakeupInterval(&statuspacket, REMOTE_WAKEUP_INTERVAL);
+		        call LowPowerListening.setRemoteWakeupInterval(&statuspacket, 0);
 		
 		        if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
 		            cmdlocked = TRUE;
