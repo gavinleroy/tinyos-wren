@@ -293,7 +293,7 @@ class CmdCenter:
         
         print("send command directly to base ..")
 
-        #self.resetDownloadTimer()
+        self.resetDownloadTimer()
 
         #time.sleep(1)
 
