@@ -739,6 +739,7 @@ implementation {
             case CMD_DOWNLOAD:
                 download = 0;
                 stopDownload = FALSE;
+	            call LowPowerListening.setLocalWakeupInterval(0);
                 
                 // When the download command comes, then change the channel and start sending 
                 // rssi log message by using the channel

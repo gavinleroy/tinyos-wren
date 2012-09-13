@@ -16,6 +16,7 @@ from tinyos.message.SerialPacket import *
 from tinyos.packet.Serial import Serial
 from collections import deque
 from array import *
+from collections import defaultdict
 
 import CmdSerialMsg
 import RssiSerialMsg
@@ -59,6 +60,11 @@ class CmdCenter:
     wrenmsgs = {}
     basemotes = {}
     
+    downloadmotes = {}
+    historymotes = {}
+    downloadmotescount = defaultdict(int)
+    
+    
     def __init__(self):
         print "init"
 
@@ -67,7 +73,7 @@ class CmdCenter:
         self.m = mni.MNI()
         self.basemsgTimer = ResettableTimer(2, self.printBaseStatus)
         self.msgTimer = ResettableTimer(3, self.printStatus)
-        self.downloadTimer = ResettableTimer(1, self.checkDownload)
+        self.downloadTimer = ResettableTimer(15, self.checkDownloadEx)
 #        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
 
@@ -121,11 +127,12 @@ class CmdCenter:
                 return;
             
             with self.lock:
-                if not self.downloadTimer.isAlive():
-                    self.downloadTimer.start()
-                self.downloadTimer.reset()
+#                if not self.downloadTimer.isAlive():
+#                    self.downloadTimer.start()
+#                self.downloadTimer.reset()
+                
                 self.logSize[m.get_dst()] = m.get_size()
-
+                
                 if (self.dl%1000) == 0:
                     sys.stdout.write(".")
                     sys.stdout.flush()
@@ -205,15 +212,16 @@ class CmdCenter:
         # If 'd' is entered again, then try to send download commands again to motes
         if nodeid == 0:
             with self.lock:
-                for key, value in self.basemotes.iteritems():
+                for baseid, value in self.basemotes.iteritems():
                     if value > 0:
-                        self.sendDownloadMsg(value, key) 
+                        # self.sendDownloadMsg(value, baseid)
+                        self.sendDownloadMsgToBase(baseid, value) 
         else:
             with self.lock:
                 exist = False
-                for key, value in self.basemotes.iteritems(): # we can optimize this lookup
+                for baseid, value in self.basemotes.iteritems(): # we can optimize this lookup
                     if value == nodeid:
-                        self.basemotes[key] = 0
+                        self.basemotes[baseid] = 0
                         exist = True
                         break
 
@@ -228,15 +236,18 @@ class CmdCenter:
             with self.lock:
                 for item in self.basemotes:
                     if len(self.motes) == 0:
-                        # see if we have more motes for download
-                        self.queryWREN()
-                        time.sleep(3)   #give 3 seconds to receive
-                        self.startDownload(0) #try to start download again
+                        if nodeid == 0:
+                            # see if we have more motes for download
+                            print "query WREN"
+                            self.queryWREN()
+                            time.sleep(3)   #give 3 seconds to receive
+                            self.startDownload(0) #try to start download again
                         break
                     
                     if self.basemotes[item] == 0:
                         self.basemotes[item] = self.motes.pop()
                         self.sendDownloadMsg(self.basemotes[item], item) 
+                        
 
     def sendDownloadMsg(self, nodeid, channel):
         msg = CmdSerialMsg.CmdSerialMsg()
@@ -245,11 +256,45 @@ class CmdCenter:
         msg.set_channel(channel)
         
         print (nodeid, channel)
+        self.downloadmotes[nodeid] = 70000
+        self.historymotes[nodeid] = 0
+        
+        print("send download command to Controller ..")
         for n in self.m.get_nodes():
 #            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
+        self.resetDownloadTimer()
+
+    def sendDownloadMsgToBase(self, baseid, nodeid):
+        msg = CmdSerialMsg.CmdSerialMsg()
+        msg.set_cmd(CMD_DOWNLOAD)
+        msg.set_dst(baseid)
+        msg.set_channel(baseid)
         
-        print("send command ..")
+        print (nodeid, baseid)
+
+        # I can do better than this here
+        self.downloadmotes[nodeid] = baseid
+        if nodeid in self.downloadmotescount:
+            self.downloadmotescount[nodeid] += 1
+        else:
+            self.downloadmotescount[nodeid] = 1
+        
+        if self.downloadmotescount[nodeid] > 1:
+            for ch in self.basemotes.values():
+                if ch == nodeid:
+                    self.basemotes[baseid] = 0
+                    break
+        else:
+            print "send download command to base"
+            #self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            self.mif[baseid].sendMsg(self.tos_source[baseid], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+        
+        print("send command directly to base ..")
+
+        #self.resetDownloadTimer()
+
         #time.sleep(1)
 
     def stopDownloadMsg(self):
@@ -276,8 +321,58 @@ class CmdCenter:
         for n in self.m.get_nodes():
             msg.set_channel(n.id)
             self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-        
 
+    def checkDownloadEx(self):
+        logSize = 0
+        sys.stdout.write("**Check Halting Donwload **\n")
+
+        doReset = False
+        for baseid, nodeid in self.basemotes.iteritems():
+            if nodeid > 0:
+                if nodeid not in self.logSize.keys():
+                    print "node id", nodeid
+                    # self.sendDownloadMsgToBase(baseid, nodeid)
+                    self.basemotes[baseid] = 0
+                    doReset = True
+                else:
+                    print "mote size", nodeid, self.downloadmotes[nodeid], "log size", self.logSize[nodeid]
+                    if self.downloadmotes[nodeid] > self.logSize[nodeid]:
+                        # it is still downloading ... OK
+                        print "ok to go..."
+                        self.downloadmotes[nodeid] = self.logSize[nodeid]
+
+#                        if self.historymotes[nodeid] == self.downloadmotes[nodeid]:
+#                            #self.sendDownloadMsgToBase(baseid, nodeid)
+#                            self.basemotes[baseid] = -1
+#                        else:
+#                            self.downloadmotes[nodeid] = self.logSize[nodeid]
+#                            self.historymotes[nodeid] = self.downloadmotes[nodeid]
+                    else:
+                        self.basemotes[baseid] = 0
+                        #self.sendDownloadMsgToBase(baseid, nodeid)
+                        doReset = True
+ 
+#                else:
+#                    self.basemotes[baseid] = 0
+#                    self.f[baseid].flush()
+#                    self.f[baseid].close()
+#                    del self.f[baseid]
+
+#        if doReset:                    
+#            self.resetDownloadTimer()
+
+        self.startDownload(0)
+        
+        sys.stdout.write("** downloadTimer reset **\n")
+        sys.stdout.flush()
+
+    def resetDownloadTimer(self):
+        with self.lock:
+            if not self.downloadTimer.isAlive():
+                self.downloadTimer.start()
+            self.downloadTimer.reset()
+            #self.downloadTimer.run()
+            
     def checkDownload(self):
         logSize = 0
         for k in self.logSize.keys():
@@ -464,6 +559,10 @@ class CmdCenter:
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'd':
+#                if not self.downloadTimer.isAlive():
+#                    self.downloadTimer.start()
+#                self.downloadTimer.reset()
+
                 # start download
                 # stop all motes first
                 self.queryWREN()
@@ -503,11 +602,13 @@ class CmdCenter:
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
 
-                    self.stopSensing()
                     # get the first group of motes for download and set channels for base stations
-                    self.queryWREN()
+                    #self.queryWREN()
                     # set base channels
                     self.setDownloadBaseStationChannel()
+
+                    time.sleep(3) #give sometime to settle down                
+                    self.stopSensing()
 
                     self.startDownload(nodeid)
                     
