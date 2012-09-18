@@ -1,7 +1,6 @@
-/*                                                                      tab:2
- *
- * Copyright (c) 2000-2012 The Regents of the University of
- * Utah.  All rights reserved.
+/*
+ * Copyright (c) 2012 University of Utah.  
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,7 +12,7 @@
  *   notice, this list of conditions and the following disclaimer in the
  *   documentation and/or other materials provided with the
  *   distribution.
- * - Neither the name of the copyright holders nor the names of
+ * - Neither the name of the University of California nor the names of
  *   its contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
@@ -29,9 +28,8 @@
  * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
- *
  */
-
+ 
 /**
 */
 
@@ -102,6 +100,14 @@ module CUSPBaseRecorderP {
 #ifdef MOTE_DEBUG
         interface DiagMsg;
 #endif        
+
+#ifdef DISSEMINATION_ON
+	    interface StdControl as DisseminationControl;
+		interface DisseminationValue<uint16_t> as CommandValue;
+		interface DisseminationUpdate<uint16_t> as CommandUpdate;
+#endif        
+
+
     }
 }
 implementation {
@@ -206,6 +212,10 @@ implementation {
         sleep = FALSE;
         messageCount = 0;
         
+  #ifdef DISSEMINATION_ON
+        call CommandValue.set(&currentCommand);
+  #endif
+        
         call AMControl.start();
         call SerialControl.start();
         call HeartbeatTimer.startPeriodic(HEARTBEAT_INTERVAL);
@@ -308,6 +318,10 @@ implementation {
         if (err == SUCCESS) {
             // Set the local wakeup interval
             call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
+
+		  #ifdef DISSEMINATION_ON
+            call DisseminationControl.start();
+		  #endif
         }
         else {
             call AMControl.start();
@@ -367,7 +381,7 @@ implementation {
 
 /*
                 call Leds.led1On();
-                if (call AMSend.send(0, &packet, m_entry.len) != SUCCESS) {
+                if (call AMSend.send(CONTROLLER_NODEID, &packet, m_entry.len) != SUCCESS) {
                     // uohhh. bad bad bad
                     // retry
                 }
@@ -497,7 +511,7 @@ implementation {
         rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
 //        memcpy(rcm, &(m_entry.msg), m_entry.len);
 //        rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-//        call AMSend.send(0, &packet, m_entry.len);
+//        call AMSend.send(CONTROLLER_NODEID, &packet, m_entry.len);
 
         call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
         if (call RssiLogSend.send(currentdst, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
@@ -695,6 +709,7 @@ implementation {
         download = 0;
 
         if (conf.sensing != TRUE) {
+	        call Leds.led2On();
             sensing = TRUE;
             if(TOS_NODE_ID == TIMESYNC_NODEID) {
                 call RandomTimer.startOneShot((call Random.rand32()%SENSING_INTERVAL));
@@ -802,14 +817,24 @@ implementation {
                 }
                 */
                 
+                #ifdef DISSEMINATION_ON
+                call CommandUpdate.change(&currentCommand);
+                #endif
+
                 break;
 
             case CMD_STOP_SENSE:
+                call Leds.led0On();
+
                 download = 0;
                 sensing = FALSE;
                 call SensingTimer.stop();
                 saveSensing(sensing);
 
+                #ifdef DISSEMINATION_ON
+                call CommandUpdate.change(&currentCommand);
+                #endif
+        
                 break;
 
             case CMD_STATUS:
@@ -833,6 +858,11 @@ implementation {
 
             case CMD_CHANNEL_RESET:
                 stopDownload = TRUE;
+
+                #ifdef DISSEMINATION_ON
+                call CommandUpdate.change(&currentCommand);
+                #endif
+
                 // Done before hitting here
                 break;       
             case CMD_WREN_STATUS:
@@ -845,6 +875,15 @@ implementation {
         
     }
 
+    #ifdef DISSEMINATION_ON
+    event void CommandValue.changed() {
+        const uint16_t* newVal = call CommandValue.get();
+        call Leds.led1Toggle();
+        currentCommand = *newVal;
+        process_command();            
+    }
+    #endif
+ 
     void sendWRENStatus()
     {
         if(TOS_NODE_ID != TIMESYNC_NODEID) {
@@ -865,7 +904,7 @@ implementation {
 	//            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	            // 0 address: Controller
                 call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 0);
-	            if (call WRENSend.send(0, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+	            if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	                wrenlocked = TRUE;
 	            }
 	        }
@@ -901,7 +940,7 @@ implementation {
 		        call LowPowerListening.setRemoteWakeupInterval(&statuspacket, 0);
 		
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-		        if (call CMDSend.send(0, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
+		        if (call CMDSend.send(CONTROLLER_NODEID, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
 		            cmdlocked = TRUE;
 		        }
 	        }
@@ -920,8 +959,6 @@ implementation {
                             uint8_t len) {
     cmd_serial_msg_t* rcm;
     
-    call Leds.led1Toggle();
-
     #ifdef MOTE_DEBUG_MESSAGES
         if (call DiagMsg.record())
         {
@@ -964,7 +1001,7 @@ implementation {
 	
 	        rcm = (cmd_serial_msg_t*)payload;
 	        
-	        call Leds.led2Toggle();
+	        call Leds.led1On();
 	        
 	        currentCommand = rcm->cmd;
 	        currentChannel = rcm->channel;        

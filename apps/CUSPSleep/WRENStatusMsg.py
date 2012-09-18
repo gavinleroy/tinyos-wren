@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 3
+DEFAULT_MESSAGE_SIZE = 7
 
 # The Active Message type associated with this message.
 AM_TYPE = 112
 
 class WRENStatusMsg(tinyos.message.Message.Message):
-    # Create a new WRENStatusMsg of size 3.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=3):
+    # Create a new WRENStatusMsg of size 7.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=7):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -36,6 +36,10 @@ class WRENStatusMsg(tinyos.message.Message.Message):
             pass
         try:
             s += "  [sensing=0x%x]\n" % (self.get_sensing())
+        except:
+            pass
+        try:
+            s += "  [buffersize=0x%x]\n" % (self.get_buffersize())
         except:
             pass
         return s
@@ -151,4 +155,59 @@ class WRENStatusMsg(tinyos.message.Message.Message):
     #
     def sizeBits_sensing(self):
         return 8
+    
+    #
+    # Accessor methods for field: buffersize
+    #   Field type: long
+    #   Offset (bits): 24
+    #   Size (bits): 32
+    #
+
+    #
+    # Return whether the field 'buffersize' is signed (False).
+    #
+    def isSigned_buffersize(self):
+        return False
+    
+    #
+    # Return whether the field 'buffersize' is an array (False).
+    #
+    def isArray_buffersize(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'buffersize'
+    #
+    def offset_buffersize(self):
+        return (24 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'buffersize'
+    #
+    def offsetBits_buffersize(self):
+        return 24
+    
+    #
+    # Return the value (as a long) of the field 'buffersize'
+    #
+    def get_buffersize(self):
+        return self.getUIntElement(self.offsetBits_buffersize(), 32, 1)
+    
+    #
+    # Set the value of the field 'buffersize'
+    #
+    def set_buffersize(self, value):
+        self.setUIntElement(self.offsetBits_buffersize(), 32, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'buffersize'
+    #
+    def size_buffersize(self):
+        return (32 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'buffersize'
+    #
+    def sizeBits_buffersize(self):
+        return 32
     

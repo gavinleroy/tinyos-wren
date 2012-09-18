@@ -39,6 +39,7 @@ CFLAGS += -DREMOTE_WAKEUP_INTERVAL=512
 CFLAGS += -DLOCAL_WAKEUP_INTERVAL=512
 
 CFLAGS += -DTOSH_DATA_LENGTH=50
+CFLAGS += -DCONTROLLER_NODEID=0
 CFLAGS += -DTIMESYNC_NODEID=1
 CFLAGS += -DSLEEP_NODEID=2
 CFLAGS += -DHEARTBEAT_INTERVAL=15000
@@ -56,6 +57,17 @@ CFLAGS += -DSMART_SENSING_COUNT=10
 #CFLAGS += -DSMART_SLEEP
 
 #====================================
+
+#=== Dissemination ===
+#CFLAGS += -DDISSEMINATION_ON
+### For Drip:
+CFLAGS += -I$(TOSDIR)/lib/net -I%T/lib/net/drip
+
+### For DIP:
+#CFLAGS += -I$(TOSDIR)/lib/net -I%T/lib/net/dip -I%T/lib/net/dip/interfaces
+
+### For Dhv
+#CFLAGS += -I$(TOSDIR)/lib/net -I%T/lib/net/dhv -I%T/lib/net/dhv/interfaces
 
 CFLAGS += -DBAT_HIGH=3.6
 CFLAGS += -DBAT_MID=3.3

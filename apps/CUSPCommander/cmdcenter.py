@@ -306,13 +306,13 @@ class CmdCenter:
             msg.set_channel(11)
             self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
-    def stopSensing(self):
+    def stopSensing(self, nodeid):
         # stop sensing
         msg = CmdSerialMsg.CmdSerialMsg()
         msg.set_cmd(CMD_STOP_SENSE)
         #msg.set_dst(0xffff)
         for n in self.m.get_nodes():
-            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
     def setDownloadBaseStationChannel(self):
         msg = CmdSerialMsg.CmdSerialMsg()
@@ -439,7 +439,7 @@ class CmdCenter:
         self.wrenmsgs = {}
 
     def printMoteQueues(self):
-        print "***", len(self.motes), "client motes are queued for download"
+        print "***", len(self.motes), "client motes have data and queued for download"
         print "***", len(self.basemotes), "download base stations are ready for download"
 
     def printMoteQueueDetail(self):
@@ -472,18 +472,20 @@ class CmdCenter:
 
         print "Hit 'q' to exit"
         print "Hit 's' to get status"
-        #print "Hit 'w' to get ready for download"
-        print "Hit 's <nodeid>' to get status of one specific node"
         print "Hit 'g' to start sensing (go)"
-        print "Hit 'g <nodeid>' to start sensing a specific node"
         print "Hit 'b' to stop sensing  (break)"
         print "Hit 'd' to start downloading"
-        print "Hit 'd <nodeid>' to start downloading a specific node"
         print "Hit 'e' to erase"
         print "Hit 'r' to restore log"
-        print "Hit 'r <nodeid>' to restore log of one specific node"
         print "Hit 'h' for help"
         print "Hit 'x' for radio channel reset"
+        #print "Hit 'w' to get ready for download"
+        print "Hit 's <nodeid>' to get status of one specific node"
+        print "Hit 'g <nodeid>' to start sensing a specific node"
+        print "Hit 'b <nodeid>' to stop sensing a specific node"
+        print "Hit 'd <nodeid>' to start downloading a specific node"
+        print "Hit 'e <nodeid>' to erase a specific node"
+        print "Hit 'r <nodeid>' to restore log of one specific node"
 
     def main_loop(self):
 
@@ -548,7 +550,7 @@ class CmdCenter:
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'b':
-                self.stopSensing()
+                self.stopSensing(0xffff)
             elif c == 'e':
                 c = raw_input("Are you sure you want to erase the data [y/n]")
                 if c != 'y':
@@ -570,7 +572,7 @@ class CmdCenter:
                 self.setDownloadBaseStationChannel()
 
                 time.sleep(3) #give sometime to settle down                
-                self.stopSensing()
+                self.stopSensing(0xffff)
 #                # get the first group of motes for download and set channels for base stations
 #                self.queryWREN()
 #                # set base channels
@@ -598,12 +600,29 @@ class CmdCenter:
                     msg.set_dst(nodeid)
                     for n in self.m.get_nodes():
                         self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                elif c[0] == 'b' and c[1] == ' ':
+                    cs = c.strip().split(" ")
+                    nodeid = int(cs[1])
+                    self.stopSensing(nodeid)
                 elif c[0] == 'g' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
                     # get status
                     msg = CmdSerialMsg.CmdSerialMsg()
                     msg.set_cmd(CMD_START_SENSE)
+                    msg.set_dst(nodeid)
+                    for n in self.m.get_nodes():
+                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                elif c[0] == 'e' and c[1] == ' ':
+                    cs = c.strip().split(" ")
+                    nodeid = int(cs[1])
+                    # get status
+                    c = raw_input("Are you sure you want to erase the data for node " + str(nodeid) + " [y/n]")
+                    if c != 'y':
+                        print "Abort erase"
+                        continue
+                    msg = CmdSerialMsg.CmdSerialMsg()
+                    msg.set_cmd(CMD_ERASE)
                     msg.set_dst(nodeid)
                     for n in self.m.get_nodes():
                         self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
@@ -618,7 +637,7 @@ class CmdCenter:
                     self.setDownloadBaseStationChannel()
 
                     time.sleep(3) #give sometime to settle down                
-                    self.stopSensing()
+                    self.stopSensing(0xffff)
 
                     self.startDownload(nodeid)
                     
