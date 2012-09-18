@@ -860,6 +860,7 @@ implementation {
 	            }
 	            sm->src = TOS_NODE_ID;
 	            sm->sensing = sensing;
+	            sm->buffersize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
 	
 	//            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	            // 0 address: Controller
