@@ -50,6 +50,7 @@ typedef nx_struct serial_status_msg {
 typedef nx_struct wren_status_msg {
     nx_uint16_t src;
     nx_uint8_t sensing;
+    nx_uint32_t buffersize;
 } wren_status_msg_t;
 
 typedef nx_struct base_status_msg {

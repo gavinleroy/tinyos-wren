@@ -184,7 +184,7 @@ class CmdCenter:
 
             # collect all client motes out there
             # print("exist", m.get_src(), self.motes.count(m.get_src()))
-            if self.motes.count(m.get_src()) == 0:
+            if self.motes.count(m.get_src()) == 0 and m.get_buffersize() > 0:
                 self.motes.append(m.get_src())
                                 
         if msg.get_amType() == BaseStatusMsg.AM_TYPE:
@@ -443,7 +443,7 @@ class CmdCenter:
         print "***", len(self.basemotes), "download base stations are ready for download"
 
     def printMoteQueueDetail(self):
-        print "***", len(self.motes), "client motes are queued for download"
+        print "***", len(self.motes), "client motes have data and queued for download"
         print "client node id:"
         for elem in self.motes:
             print elem
@@ -475,6 +475,7 @@ class CmdCenter:
         #print "Hit 'w' to get ready for download"
         print "Hit 's <nodeid>' to get status of one specific node"
         print "Hit 'g' to start sensing (go)"
+        print "Hit 'g <nodeid>' to start sensing a specific node"
         print "Hit 'b' to stop sensing  (break)"
         print "Hit 'd' to start downloading"
         print "Hit 'd <nodeid>' to start downloading a specific node"
@@ -594,6 +595,15 @@ class CmdCenter:
                     # get status
                     msg = CmdSerialMsg.CmdSerialMsg()
                     msg.set_cmd(CMD_STATUS)
+                    msg.set_dst(nodeid)
+                    for n in self.m.get_nodes():
+                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                elif c[0] == 'g' and c[1] == ' ':
+                    cs = c.strip().split(" ")
+                    nodeid = int(cs[1])
+                    # get status
+                    msg = CmdSerialMsg.CmdSerialMsg()
+                    msg.set_cmd(CMD_START_SENSE)
                     msg.set_dst(nodeid)
                     for n in self.m.get_nodes():
                         self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
