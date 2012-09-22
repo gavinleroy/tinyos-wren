@@ -287,6 +287,16 @@ implementation {
             
                call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
         
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("m_s:1");
+                        call DiagMsg.uint16(currentdst);
+                        call DiagMsg.send();
+                    }
+                #endif
+
     //            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
                 if (call CMDSend.send(currentdst, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
                 #ifdef MOTE_DEBUG_MESSAGES
@@ -406,7 +416,7 @@ implementation {
                 currentdst     = rcm->dst;
                 
 	            if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL) { 
-	                post changeChannelTask();
+                    post changeChannelTask();
                 }
                 else {
                     sendCommand();
@@ -537,13 +547,28 @@ implementation {
             currentCommand = rcm->cmd;
             currentChannel = rcm->channel;
             currentdst     = rcm->dst;
-            
+
+            /*            
             if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL) { 
+                if (currentChannel != call CC2420Config.getChannel()) {
+                    post changeChannelTask();
+                }
+                else {
+                    sendCommand();
+                }
+            }
+            else {
+                sendCommand();
+            } 
+            */
+
+            if (currentCommand == CMD_CHANNEL) { 
                 post changeChannelTask();
             }
             else {
                 sendCommand();
             } 
+        
         }
         return msg;
     }	  
