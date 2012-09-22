@@ -298,7 +298,7 @@ implementation {
         } else {
             if(!rssilocked) {
 
-                call Leds.led2On();
+                call Leds.led2Toggle();
 
                 call LedOffTimer.startOneShot(LED_INTERVAL);
 
