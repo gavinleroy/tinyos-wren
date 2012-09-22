@@ -72,7 +72,7 @@ class CmdCenter:
         self.m = mni.MNI()
         self.basemsgTimer = ResettableTimer(2, self.printBaseStatus)
         self.msgTimer = ResettableTimer(3, self.printStatus)
-        self.downloadTimer = ResettableTimer(10, self.check_Download)
+        self.downloadTimer = ResettableTimer(5, self.check_Download)
 #        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
 
@@ -223,34 +223,36 @@ class CmdCenter:
                 # just end here
                 return -1
 
-            
     def monitor_Mote(self, baseid, nodeid):
-        if nodeid not in self.logSize.keys():
-            print "node id", nodeid
-            self.downloadTrials[nodeid] += 1
-            
-            if self.downloadTrials[nodeid] > 2: # greater than 3 time trials, give up for the mote
-                self.downloaders[baseid] = 0
-            else:
-                # try to download again
-                self.sendDownloadCmdToDownloader(baseid, nodeid)
-                time.sleep(1)
-        else:
-            # mote download started. Now check to see if the mote is still downloading....
-            if self.moteLogSize[nodeid] != self.logSize[nodeid]:
-                self.downloadTrials[nodeid] = 0
-                
-                # it is still downloading ... OK
-                self.moteLogSize[nodeid] = self.logSize[nodeid]
-            else:
+        while True:
+            if nodeid not in self.logSize.keys():
+                print "node id", nodeid
                 self.downloadTrials[nodeid] += 1
-                if self.downloadTrials[nodeid] > 2: # greater than 3 time trials, give up for the mote
+                
+                if self.downloadTrials[nodeid] > 1: # greater than 3 time trials, give up for the mote
                     self.downloaders[baseid] = 0
+                    break
                 else:
                     # try to download again
                     self.sendDownloadCmdToDownloader(baseid, nodeid)
                     time.sleep(1)
+            else:
+                # mote download started. Now check to see if the mote is still downloading....
+                if self.moteLogSize[nodeid] != self.logSize[nodeid]:
+                    self.downloadTrials[nodeid] = 0
+                    self.moteLogSize[nodeid] = self.logSize[nodeid]
+                    break
+                else:
+                    self.downloadTrials[nodeid] += 1
+                    if self.downloadTrials[nodeid] > 1: # greater than 3 time trials, give up for the mote
+                        self.downloaders[baseid] = 0
+                        break
+                    else:
+                        # try to download again
+                        self.sendDownloadCmdToDownloader(baseid, nodeid)
+                        time.sleep(1)
 
+        #self.downloadTimer.reset()
         
     def run_Mote(self):
         for baseid in self.downloaders:
@@ -265,8 +267,7 @@ class CmdCenter:
                     time.sleep(1)
             else:
                 self.monitor_Mote(baseid, self.downloaders[baseid])
-
-        self.downloadTimer.reset()
+        #self.downloadTimer.reset()
                 
     def start(self):
         self.resetDownloadTimer()
@@ -280,6 +281,7 @@ class CmdCenter:
     
     def check_Download(self):
         self.run_Mote()
+        self.downloadTimer.reset()
 
 
     def sendDownloadCmdToController(self, channel, nodeid):
