@@ -29,8 +29,9 @@ CMD_ERASE           = 1
 CMD_START_SENSE     = 2
 CMD_STOP_SENSE      = 3
 CMD_STATUS          = 4
-CMD_LOGSYNC         = 7
 CMD_START_BLINK     = 5
+CMD_STOP_BLINK      = 6
+CMD_LOGSYNC         = 7
 CMD_BASESTATUS      = 8
 CMD_NONE            = 9
 CMD_CHANNEL         = 10
@@ -221,7 +222,7 @@ class CmdCenter:
                 return self.motes.pop()
             else:
                 # just end here
-                return -1
+                return 0
 
     def monitor_Mote(self, baseid, nodeid):
         while True:
@@ -229,13 +230,14 @@ class CmdCenter:
                 print "node id", nodeid
                 self.downloadTrials[nodeid] += 1
                 
-                if self.downloadTrials[nodeid] > 1: # greater than 3 time trials, give up for the mote
-                    self.downloaders[baseid] = 0
+                if self.downloadTrials[nodeid] > 2: # greater than 3 time trials, give up for the mote
+                    self.done_Mote(nodeid)
+                    #self.downloaders[baseid] = 0
                     break
                 else:
                     # try to download again
                     self.sendDownloadCmdToDownloader(baseid, nodeid)
-                    time.sleep(1)
+                    time.sleep(2)
             else:
                 # mote download started. Now check to see if the mote is still downloading....
                 if self.moteLogSize[nodeid] != self.logSize[nodeid]:
@@ -244,19 +246,35 @@ class CmdCenter:
                     break
                 else:
                     self.downloadTrials[nodeid] += 1
-                    if self.downloadTrials[nodeid] > 1: # greater than 3 time trials, give up for the mote
-                        self.downloaders[baseid] = 0
+                    if self.downloadTrials[nodeid] > 2: # greater than 3 time trials, give up for the mote
+                        #self.downloaders[baseid] = 0
+                        self.done_Mote(nodeid)
                         break
                     else:
                         # try to download again
                         self.sendDownloadCmdToDownloader(baseid, nodeid)
-                        time.sleep(1)
+                        time.sleep(2)
 
         #self.downloadTimer.reset()
+
+#    def run_Mote(self):
+#        for baseid in self.downloaders:
+#            if self.downloaders[baseid] == 0:
+#                nodeid = self.assign_Mote()
+#                if nodeid > 0:
+#                    self.downloadTrials[nodeid] = 0
+#                    self.moteLogSize[nodeid] = 0
+#
+#                    self.downloaders[baseid] = nodeid
+#                    self.sendDownloadCmdToController(baseid, nodeid) 
+#                    time.sleep(1)
+#            else:
+#                self.monitor_Mote(baseid, self.downloaders[baseid])
+#        #self.downloadTimer.reset()
         
     def run_Mote(self):
-        for baseid in self.downloaders:
-            if self.downloaders[baseid] == 0:
+        for baseid, nodeid in self.downloaders.iteritems(): # we can optimize this lookup
+            if nodeid == 0:
                 nodeid = self.assign_Mote()
                 if nodeid > 0:
                     self.downloadTrials[nodeid] = 0
@@ -267,6 +285,7 @@ class CmdCenter:
                     time.sleep(1)
             else:
                 self.monitor_Mote(baseid, self.downloaders[baseid])
+                time.sleep(1)
         #self.downloadTimer.reset()
                 
     def start(self):
@@ -333,6 +352,23 @@ class CmdCenter:
         #msg.set_dst(0xffff)
         for n in self.m.get_nodes():
             self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
+    def startBlink(self, nodeid):
+        # stop sensing
+        msg = CmdSerialMsg.CmdSerialMsg()
+        msg.set_cmd(CMD_START_BLINK)
+        #msg.set_dst(0xffff)
+        for n in self.m.get_nodes():
+            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
+    def stopBlink(self, nodeid):
+        # stop sensing
+        msg = CmdSerialMsg.CmdSerialMsg()
+        msg.set_cmd(CMD_STOP_BLINK)
+        #msg.set_dst(0xffff)
+        for n in self.m.get_nodes():
+            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
 
     def setDownloadBaseStationChannel(self):
         msg = CmdSerialMsg.CmdSerialMsg()
@@ -429,6 +465,8 @@ class CmdCenter:
         print "Hit 'd' to start downloading"
         print "Hit 'e' to erase"
         print "Hit 'r' to restore log"
+        print "Hit 't' to start blink"
+        print "Hit 'a' to stop blink"
         print "Hit 'h' for help"
         print "Hit 'x' for radio channel reset"
         #print "Hit 'w' to get ready for download"
@@ -497,8 +535,15 @@ class CmdCenter:
                 #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
+                #self.stopBlink(0xffff)
+
             elif c == 'b':
                 self.stopSensing(0xffff)
+            elif c == 't':
+                self.startBlink(0xffff)
+            elif c == 'a':
+                self.stopBlink(0xffff)
             elif c == 'e':
                 c = raw_input("Are you sure you want to erase the data [y/n]")
                 if c != 'y':

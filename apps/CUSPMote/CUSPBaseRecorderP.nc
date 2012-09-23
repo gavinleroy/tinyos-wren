@@ -64,7 +64,7 @@ module CUSPBaseRecorderP {
         interface ConfigStorage as Config;
         interface Mount as Mount;
         
-        interface Timer<TMilli> as Timer0;
+        interface Timer<TMilli> as LogSendTimer;
         interface Timer<TMilli> as SensingTimer;
         interface Timer<TMilli> as HeartbeatTimer;
         interface Timer<TMilli> as LedOffTimer;
@@ -107,6 +107,7 @@ module CUSPBaseRecorderP {
 		interface DisseminationUpdate<uint16_t> as CommandUpdate;
 #endif        
 
+        interface Blink;
 
     }
 }
@@ -389,6 +390,9 @@ implementation {
                 
                 call Leds.led1On();
                 
+                #ifdef RF233_USE_SECOND_RFPOWER
+                    call PacketTransmitPower.set(&packet, RF233_SECOND_RFPOWER);
+                #endif        
                 call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
 
                 if (call RssiLogSend.send(currentdst, &packet, m_entry.len, time) == SUCCESS) {
@@ -468,7 +472,7 @@ implementation {
         }
         else {
             if (!stopDownload) {
-                call Timer0.startOneShot(INTER_PACKET_INTERVAL);
+                call LogSendTimer.startOneShot(INTER_PACKET_INTERVAL);
             }
         }
     }
@@ -491,7 +495,7 @@ implementation {
             }
         }
         else {
-            call Timer0.startOneShot(INTER_PACKET_INTERVAL);
+            call LogSendTimer.startOneShot(INTER_PACKET_INTERVAL);
         }
     }
 
@@ -503,7 +507,7 @@ implementation {
         statuslocked = FALSE;
     }
 
-    event void Timer0.fired() {
+    event void LogSendTimer.fired() {
         uint32_t time;
         rssi_serial_msg_t* rcm;
         
@@ -707,6 +711,7 @@ implementation {
     void startSensing()
     {
         download = 0;
+        call Blink.stop();
 
         if (conf.sensing != TRUE) {
 	        call Leds.led2On();
@@ -717,7 +722,10 @@ implementation {
                 call RandomTimer.startOneShot(2*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
             }
             saveSensing(sensing);
-        }        
+        } 
+        else {
+            sensing = TRUE;
+        }       
     }
 
     task void changeChannelTask() {
@@ -853,7 +861,11 @@ implementation {
                 break;
 
             case CMD_START_BLINK:
-                call Leds.led1Toggle();
+                call Blink.start();
+                break;
+
+            case CMD_STOP_BLINK:
+                call Blink.stop();
                 break;
 
             case CMD_CHANNEL_RESET:
@@ -890,8 +902,6 @@ implementation {
 	        uint32_t time = call GlobalTime.getLocalTime();
 	        wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
 	
-	//        call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
-	
 	        if(!wrenlocked) {
 	
 	            if (sm == NULL) {
@@ -903,6 +913,11 @@ implementation {
 	
 	//            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	            // 0 address: Controller
+
+	            #ifdef RF233_USE_SECOND_RFPOWER
+	                call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+	            #endif        
+	    
                 call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 0);
 	            if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
 	                wrenlocked = TRUE;
@@ -915,8 +930,6 @@ implementation {
     {
         uint32_t time;
         serial_status_msg_t* sm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
-
-//        call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
 
         if(!cmdlocked) {
 
@@ -937,6 +950,10 @@ implementation {
             
             atomic sm->bat            = batteryLevelVal;
 
+		        #ifdef RF233_USE_SECOND_RFPOWER
+		            call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
+		        #endif        
+		
 		        call LowPowerListening.setRemoteWakeupInterval(&statuspacket, 0);
 		
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
@@ -1236,7 +1253,7 @@ implementation {
             call SerialControl.stop();
         }
 
-        call Timer0.stop();
+        call LogSendTimer.stop();
         call SensingTimer.stop();
         call HeartbeatTimer.stop();
         call LedOffTimer.stop();

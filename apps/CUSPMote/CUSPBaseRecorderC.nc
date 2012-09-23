@@ -50,7 +50,7 @@ implementation {
   components ActiveMessageC;
   components new LogStorageC(VOLUME_LOGTEST, TRUE);
   components new ConfigStorageC(VOLUME_CONFIGTEST);
-  components new TimerMilliC() as Timer0;
+  components new TimerMilliC() as LogSendTimer;
   components new TimerMilliC() as SensingTimer;
   components new TimerMilliC() as HeartbeatTimer;
   components new TimerMilliC() as LedOffTimer;
@@ -103,7 +103,7 @@ implementation {
   App.Config -> ConfigStorageC.ConfigStorage;
   App.Mount  -> ConfigStorageC.Mount;
 
-  App.Timer0         -> Timer0;
+  App.LogSendTimer   -> LogSendTimer;
   App.SensingTimer   -> SensingTimer;
   App.HeartbeatTimer -> HeartbeatTimer;
   App.LedOffTimer    -> LedOffTimer;
@@ -151,4 +151,6 @@ implementation {
   App.CommandUpdate -> CommandObjectC;
   #endif
   
+  components BlinkC;
+  App.Blink -> BlinkC;
 }
