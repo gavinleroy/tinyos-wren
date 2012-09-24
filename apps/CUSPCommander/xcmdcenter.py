@@ -222,7 +222,7 @@ class CmdCenter:
                 return self.motes.pop()
             else:
                 # just end here
-                return 0
+                return -1
 
     def monitor_Mote(self, baseid, nodeid):
         while True:
@@ -296,10 +296,14 @@ class CmdCenter:
                     self.downloaders[baseid] = nodeid
                     self.sendDownloadCmdToController(baseid, nodeid) 
                     time.sleep(1)
+                elif nodeid == -1:
+                    # reach the end. maybe exit
+                    print "download finished !"
+                    return
             else:
                 self.monitor_Mote(baseid, self.downloaders[baseid])
                 time.sleep(1)
-        #self.downloadTimer.reset()
+        self.downloadTimer.reset()
                 
     def start(self):
         self.resetDownloadTimer()
