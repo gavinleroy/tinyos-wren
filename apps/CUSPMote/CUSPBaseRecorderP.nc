@@ -102,9 +102,9 @@ module CUSPBaseRecorderP {
 #endif        
 
 #ifdef DISSEMINATION_ON
-	    interface StdControl as DisseminationControl;
-		interface DisseminationValue<uint16_t> as CommandValue;
-		interface DisseminationUpdate<uint16_t> as CommandUpdate;
+        interface StdControl as DisseminationControl;
+        interface DisseminationValue<uint16_t> as CommandValue;
+        interface DisseminationUpdate<uint16_t> as CommandUpdate;
 #endif        
 
         interface Blink;
@@ -320,9 +320,9 @@ implementation {
             // Set the local wakeup interval
             call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
 
-		  #ifdef DISSEMINATION_ON
+          #ifdef DISSEMINATION_ON
             call DisseminationControl.start();
-		  #endif
+          #endif
         }
         else {
             call AMControl.start();
@@ -362,14 +362,14 @@ implementation {
         #endif
 
         if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
-	        #ifdef MOTE_DEBUG_MESSAGES
-	        
-	            if (call DiagMsg.record())
-	            {
-	                call DiagMsg.str("lr-rd:1");
-	                call DiagMsg.send();
-	            }
-	        #endif
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("lr-rd:1");
+                    call DiagMsg.send();
+                }
+            #endif
         
             rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
             
@@ -396,24 +396,24 @@ implementation {
                 call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
 
                 if (call RssiLogSend.send(currentdst, &packet, m_entry.len, time) == SUCCESS) {
-		            #ifdef MOTE_DEBUG_MESSAGES
-		            
-		                if (call DiagMsg.record())
-		                {
-		                    call DiagMsg.str("rls-s:s");
-		                    call DiagMsg.send();
-		                }
-		            #endif
+                    #ifdef MOTE_DEBUG_MESSAGES
+                    
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("rls-s:s");
+                            call DiagMsg.send();
+                        }
+                    #endif
                 }
                 else {
-		            #ifdef MOTE_DEBUG_MESSAGES
-		            
-		                if (call DiagMsg.record())
-		                {
-		                    call DiagMsg.str("rls-s:e");
-		                    call DiagMsg.send();
-		                }
-		            #endif
+                    #ifdef MOTE_DEBUG_MESSAGES
+                    
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("rls-s:e");
+                            call DiagMsg.send();
+                        }
+                    #endif
                 }
         
 //                if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
@@ -458,16 +458,16 @@ implementation {
             call Packet.clear(&packet);
 
             if (!stopDownload) {            
-	            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-	                // Handle error.
-			        #ifdef MOTE_DEBUG_MESSAGES
-			            if (call DiagMsg.record())
-			            {
-			                call DiagMsg.str("rls-sd:e");
-			                call DiagMsg.send();
-			            }
-			        #endif
-	            }
+                if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+                    // Handle error.
+                    #ifdef MOTE_DEBUG_MESSAGES
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("rls-sd:e");
+                            call DiagMsg.send();
+                        }
+                    #endif
+                }
            }
         }
         else {
@@ -534,7 +534,7 @@ implementation {
         if(!sensing) {
             call SensingTimer.stop();
         } else {
-            if(!rssilocked) {
+            if(!rssilocked && !sleep) {
                 rssiMaxUnlockCounter = 0;
 
                 call Leds.led2On();
@@ -575,6 +575,7 @@ implementation {
                 }
             }
         }
+        sleep = FALSE;
     }
 
     event void BatteryTimer.fired() {
@@ -665,6 +666,8 @@ implementation {
             logWriteBusy = FALSE;
             logQueueFull = FALSE;
             
+            call Blink.start();
+            
             // let cmdcenter know that erase is finished.
             // sendStatus();
             call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
@@ -711,10 +714,12 @@ implementation {
     void startSensing()
     {
         download = 0;
+        sleep = FALSE;
+        
         call Blink.stop();
 
         if (conf.sensing != TRUE) {
-	        call Leds.led2On();
+            call Leds.led2On();
             sensing = TRUE;
             if(TOS_NODE_ID == TIMESYNC_NODEID) {
                 call RandomTimer.startOneShot((call Random.rand32()%SENSING_INTERVAL));
@@ -762,31 +767,32 @@ implementation {
             case CMD_DOWNLOAD:
                 download = 0;
                 stopDownload = FALSE;
-	            call LowPowerListening.setLocalWakeupInterval(0);
+                sleep = FALSE;
+                call LowPowerListening.setLocalWakeupInterval(0);
                 
                 // When the download command comes, then change the channel and start sending 
                 // rssi log message by using the channel
                 // First get the channel it needs to use
                 
-	            #ifdef MOTE_DEBUG_MESSAGES
-	                if (call DiagMsg.record())
-	                {
-	                    call DiagMsg.str("d:");
-	                    call DiagMsg.send();
-	                }
-	            #endif
-	        
-	            sensing = FALSE;
-	            smartSensingCounter = 0;
-	        
-	            // Halt all including the smart sensing
-	            halt = TRUE;
-	        
-	            call SensingTimer.stop();
-	            saveSensing(sensing);
-	        
-	            // Wait until all queued log entires are stored into log storage                    
-	            call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
+                #ifdef MOTE_DEBUG_MESSAGES
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("d:");
+                        call DiagMsg.send();
+                    }
+                #endif
+            
+                sensing = FALSE;
+                smartSensingCounter = 0;
+            
+                // Halt all including the smart sensing
+                halt = TRUE;
+            
+                call SensingTimer.stop();
+                saveSensing(sensing);
+            
+                // Wait until all queued log entires are stored into log storage                    
+                call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
             
                 break;
 
@@ -794,6 +800,7 @@ implementation {
                 download = 0;
                 sensing = FALSE;
                 smartSensingCounter = 0;
+                sleep = FALSE;                
                 
                 // Halt all including the smart sensing
                 halt = TRUE;
@@ -811,7 +818,6 @@ implementation {
             case CMD_START_SENSE:
                 // Halt all including the smart sensing
                 halt = FALSE;
-
                 startSensing();
 
                 /*
@@ -836,6 +842,8 @@ implementation {
 
                 download = 0;
                 sensing = FALSE;
+                sleep = FALSE;
+                                
                 call SensingTimer.stop();
                 saveSensing(sensing);
 
@@ -849,13 +857,15 @@ implementation {
                 // sendStatus();
                 call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
 
-		        // Send to Base
-		        // sendStatusToBase();
+                // Send to Base
+                // sendStatusToBase();
                 
                 break;
                 
             case CMD_LOGSYNC:
                 download = 0;
+                sleep = FALSE;
+                                
                 call LogWrite.sync();
 
                 break;
@@ -870,7 +880,8 @@ implementation {
 
             case CMD_CHANNEL_RESET:
                 stopDownload = TRUE;
-
+                sleep = FALSE;
+                
                 #ifdef DISSEMINATION_ON
                 call CommandUpdate.change(&currentCommand);
                 #endif
@@ -899,30 +910,30 @@ implementation {
     void sendWRENStatus()
     {
         if(TOS_NODE_ID != TIMESYNC_NODEID) {
-	        uint32_t time = call GlobalTime.getLocalTime();
-	        wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
-	
-	        if(!wrenlocked) {
-	
-	            if (sm == NULL) {
-	                return;
-	            }
-	            sm->src = TOS_NODE_ID;
-	            sm->sensing = sensing;
-	            sm->buffersize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-	
-	//            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-	            // 0 address: Controller
+            uint32_t time = call GlobalTime.getLocalTime();
+            wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
+    
+            if(!wrenlocked) {
+    
+                if (sm == NULL) {
+                    return;
+                }
+                sm->src = TOS_NODE_ID;
+                sm->sensing = sensing;
+                sm->buffersize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
+    
+    //            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+                // 0 address: Controller
 
-	            #ifdef RF233_USE_SECOND_RFPOWER
-	                call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
-	            #endif        
-	    
+                #ifdef RF233_USE_SECOND_RFPOWER
+                    call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+                #endif        
+        
                 call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 0);
-	            if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-	                wrenlocked = TRUE;
-	            }
-	        }
+                if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+                    wrenlocked = TRUE;
+                }
+            }
         }
     }
 
@@ -950,17 +961,17 @@ implementation {
             
             atomic sm->bat            = batteryLevelVal;
 
-		        #ifdef RF233_USE_SECOND_RFPOWER
-		            call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
-		        #endif        
-		
-		        call LowPowerListening.setRemoteWakeupInterval(&statuspacket, 0);
-		
+                #ifdef RF233_USE_SECOND_RFPOWER
+                    call PacketTransmitPower.set(&statuspacket, RF233_SECOND_RFPOWER);
+                #endif        
+        
+                call LowPowerListening.setRemoteWakeupInterval(&statuspacket, 0);
+        
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-		        if (call CMDSend.send(CONTROLLER_NODEID, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-		            cmdlocked = TRUE;
-		        }
-	        }
+                if (call CMDSend.send(CONTROLLER_NODEID, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
+                    cmdlocked = TRUE;
+                }
+            }
     }
 
     event void CMDSend.sendDone(message_t* msg, error_t err) {
@@ -985,53 +996,53 @@ implementation {
     #endif
 
     if (call AMPacket.isForMe(msg)) {
-	    #ifdef MOTE_DEBUG_MESSAGES
-	        if (call DiagMsg.record())
-	        {
-	            call DiagMsg.str("cmdR:1");
-	            call DiagMsg.send();
-	        }
-	    #endif
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("cmdR:1");
+                call DiagMsg.send();
+            }
+        #endif
 
-	    if (len != sizeof(cmd_serial_msg_t)) {
-		    #ifdef MOTE_DEBUG_MESSAGES
-		        if (call DiagMsg.record())
-		        {
-		            call DiagMsg.str("cmdR:e");
-		            call DiagMsg.send();
-		        }
-		    #endif
-	        
-	        call Leds.led0Toggle();
-	        return msg;
-	    }
-	    else {
-		    #ifdef MOTE_DEBUG_MESSAGES
-		        if (call DiagMsg.record())
-		        {
-		            call DiagMsg.str("cmdR:2");
-		            call DiagMsg.send();
-		        }
-		    #endif
+        if (len != sizeof(cmd_serial_msg_t)) {
+            #ifdef MOTE_DEBUG_MESSAGES
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("cmdR:e");
+                    call DiagMsg.send();
+                }
+            #endif
+            
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            #ifdef MOTE_DEBUG_MESSAGES
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("cmdR:2");
+                    call DiagMsg.send();
+                }
+            #endif
 
-	        // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
-	
-	        rcm = (cmd_serial_msg_t*)payload;
-	        
-	        call Leds.led1On();
-	        
-	        currentCommand = rcm->cmd;
-	        currentChannel = rcm->channel;        
-	        currentdst = rcm->dst;
-	        
-	        if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL_RESET) {    
+            // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+    
+            rcm = (cmd_serial_msg_t*)payload;
+            
+            call Leds.led1On();
+            
+            currentCommand = rcm->cmd;
+            currentChannel = rcm->channel;        
+            currentdst = rcm->dst;
+            
+            if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL_RESET) {    
                 post changeChannelTask();
             }
             else {
-	           process_command();
-	        }
-	        
-	    }
+               process_command();
+            }
+            
+        }
     }
     return msg;
   }
@@ -1092,7 +1103,7 @@ implementation {
         atomic {
             messageCount++;
             
-            if (!logQueueFull && !sleep) {
+            if (!logQueueFull) {
 
                 #ifdef SMART_SENSING
                     smartSensing();
@@ -1113,22 +1124,27 @@ implementation {
                     } else {
                         time  = call GlobalTime.getLocalTime();
                     }
-    
+
                     // If this message is from node 1, then delay sensing
                     if(rssim->src == TIMESYNC_NODEID || rssim->src == SLEEP_NODEID) {
+                        sleep = TRUE;                        
                         call SensingTimer.stop();
                         call RandomTimer.startOneShot(2*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
                         return msg;
+                    } 
+                    
+                    if (sleep) {
+                        return msg;
                     }
 
-			        #ifdef MOTE_DEBUG_MESSAGES
-			            if (call DiagMsg.record())
-			            {
-			                call DiagMsg.str("rec:2");
-			                call DiagMsg.uint16(rssim->src);
-			                call DiagMsg.send();
-			            }
-			        #endif
+                    #ifdef MOTE_DEBUG_MESSAGES
+                        if (call DiagMsg.record())
+                        {
+                            call DiagMsg.str("rec:2");
+                            call DiagMsg.uint16(rssim->src);
+                            call DiagMsg.send();
+                        }
+                    #endif
                     
                     rssi_serial_m.counter        = rssim->counter;
                     rssi_serial_m.dst            = TOS_NODE_ID;
