@@ -53,12 +53,21 @@ typedef nx_struct wren_status_msg {
     nx_uint32_t buffersize;
 } wren_status_msg_t;
 
+typedef nx_struct wren_handshake_msg {
+    nx_uint16_t src;
+    nx_uint16_t dst;
+    nx_uint16_t cmd;
+    nx_uint32_t logsize;
+    nx_uint8_t channel;
+    nx_uint8_t isAcked;
+} wren_handshake_msg_t;
+
 typedef nx_struct base_status_msg {
     nx_uint16_t src;
     nx_uint32_t localtime;
     nx_uint32_t globaltime;
     nx_uint8_t isSynced;
-	nx_uint8_t channel;
+    nx_uint8_t channel;
 } base_status_msg_t;
 
 enum {
@@ -70,6 +79,7 @@ enum {
   AM_BASE_STATUS_MSG = 0x8,
   AM_WREN_STATUS_MSG = 0x70,
   AM_BASE_MSG = 0x60,
+  AM_HANDSHAKE_MSG = 0x50,
 };
 
 enum {

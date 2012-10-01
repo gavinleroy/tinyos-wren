@@ -1,7 +1,7 @@
 COMPONENT=CUSPBaseRecorderC
 
-BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py
-CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py
+BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENHandShakeMsg.py
+CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENHandShakeMsg.py
 
 CmdSerialMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=CmdSerialMsg CUSPSerial.h cmd_serial_msg -o $@
@@ -17,6 +17,9 @@ BaseStatusMsg.py: CUSPSerial.h
 
 WRENStatusMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=WRENStatusMsg CUSPSerial.h wren_status_msg -o $@
+
+WRENHandShakeMsg.py: CUSPSerial.h
+	    mig python -target=null $(CFLAGS) -python-classname=WRENHandShakeMsg CUSPSerial.h wren_handshake_msg -o $@
 
 PFLAGS += -DTIMESYNC_RATE=10
 

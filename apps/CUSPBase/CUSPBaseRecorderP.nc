@@ -51,6 +51,9 @@ module CUSPBaseRecorderP {
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
 
+        interface TimeSyncAMSend<TMilli,uint32_t> as HandShakeSend;
+        interface Receive as HandShakeReceive; // cmd receive
+
         interface Receive as BaseCMDReceive; // base receive
         interface TimeSyncAMSend<TMilli,uint32_t> as BaseStatusSend;
         
@@ -85,7 +88,7 @@ implementation {
     };
 
 		enum {
-		  UART_QUEUE_LEN = 12,
+		  UART_QUEUE_LEN = 24,
 		  RADIO_QUEUE_LEN = 12,
 		};
       
@@ -119,20 +122,23 @@ implementation {
     message_t basestatuspacket;
     message_t rssipacket;
     message_t cmdpacket;
+    message_t handshakepacket;
 
     bool statuslocked = FALSE;
     bool cmdlocked = FALSE;
     bool amsendlocked = FALSE;
     bool basestatuslocked = FALSE;
+    bool handshakelocked = FALSE;
 
-    uint16_t currentCommand;
+    uint16_t currentCMD;
     uint8_t currentChannel;
-    uint16_t currentdst;
+    uint16_t currentDST;
 
     task void changeChannelTask();
     task void uartSendTask();
     void sendStatusToBase();
     void sendCommand();
+    void sendHandShake(wren_handshake_msg_t* rkcm);
 
     void dropBlink() {
 	   call Leds.led2Toggle();
@@ -162,7 +168,7 @@ implementation {
 	    if (call SerialControl.start() == EALREADY)
 	      uartFull = FALSE;
     
-        currentCommand = CMD_NONE;
+        currentCMD = CMD_NONE;
         currentChannel = CC2420_DEF_CHANNEL;
     
     }
@@ -275,13 +281,13 @@ implementation {
         time  = call GlobalTime.getLocalTime();
 
         // set the power for this packet to high
-        call CC2420Packet.setPower(&cmdpacket, CC2420_SECOND_RFPOWER); 
+        // call CC2420Packet.setPower(&cmdpacket, CC2420_SECOND_RFPOWER); 
 
        // call LowPowerListening.setRemoteWakeupInterval(msg, REMOTE_WAKEUP_INTERVAL);
 
         call Leds.led2Toggle();
         
-        switch(currentCommand)
+        switch(currentCMD)
         {
             case CMD_DOWNLOAD:
             
@@ -292,13 +298,13 @@ implementation {
                     if (call DiagMsg.record())
                     {
                         call DiagMsg.str("m_s:1");
-                        call DiagMsg.uint16(currentdst);
+                        call DiagMsg.uint16(currentDST);
                         call DiagMsg.send();
                     }
                 #endif
 
     //            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-                if (call CMDSend.send(currentdst, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
+                if (call CMDSend.send(currentDST, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
                 #ifdef MOTE_DEBUG_MESSAGES
                 
                     if (call DiagMsg.record())
@@ -395,9 +401,6 @@ implementation {
                                 void *payload,
                                 uint8_t len) {
 
-        uint32_t time;
-        time  = call GlobalTime.getLocalTime();
-
 	    if (call RadioAMPacket.isForMe(msg)) {
 	        if (len != sizeof(cmd_serial_msg_t)) {
 	            call Leds.led0Toggle();
@@ -411,21 +414,91 @@ implementation {
 	            rkcm->dst   = rcm->dst;
 	            rkcm->channel = rcm->channel;
 	            
-	            currentCommand = rcm->cmd;
+	            currentCMD = rcm->cmd;
 	            currentChannel = rcm->channel;
-                currentdst     = rcm->dst;
+                currentDST     = rcm->dst;
                 
-	            if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL) { 
+                if (currentCMD == CMD_CHANNEL) { 
                     post changeChannelTask();
                 }
                 else {
                     sendCommand();
                 } 
+                /*
+	            if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL) { 
+                    post changeChannelTask();
+                }
+                else {
+                    sendCommand();
+                } 
+                */
 	        }
 	    }
 	    return msg;
     }
 
+     event message_t * HandShakeReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+
+        if (call RadioAMPacket.isForMe(msg)) {
+            if (len != sizeof(wren_handshake_msg_t)) {
+                call Leds.led0Toggle();
+                return msg;
+            }
+            else {
+                wren_handshake_msg_t* rkcm = (wren_handshake_msg_t*)call RadioPacket.getPayload(&handshakepacket, sizeof(wren_handshake_msg_t));
+                wren_handshake_msg_t* rcm = (wren_handshake_msg_t*)payload;
+                
+                rkcm->src   = rcm->src;
+                rkcm->cmd   = rcm->cmd;
+                rkcm->dst   = rcm->dst;
+                rkcm->logsize = rcm->logsize;
+                rkcm->channel = rcm->channel;
+                
+                sendHandShake(rkcm);
+            }
+        }
+        return msg;
+    }
+
+    void sendHandShake(wren_handshake_msg_t* rkcm)
+    {
+        uint32_t time;
+        time  = call GlobalTime.getLocalTime();
+
+        if(!handshakelocked) {
+
+            if (rkcm == NULL) {
+                return;
+            }
+            rkcm->isAcked = 1;
+            
+                #ifdef RF233_USE_SECOND_RFPOWER
+                    call PacketTransmitPower.set(&handshakepacket, RF233_SECOND_RFPOWER);
+                #endif        
+        
+                call LowPowerListening.setRemoteWakeupInterval(&handshakepacket, REMOTE_WAKEUP_INTERVAL);
+        
+//                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
+                if (call HandShakeSend.send(rkcm->src, &handshakepacket, sizeof(wren_handshake_msg_t), time) == SUCCESS) {
+                    handshakelocked = TRUE;
+                }
+            }
+    }
+
+    event void HandShakeSend.sendDone(message_t* msg, error_t err) {
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("m_s:d");
+                call DiagMsg.send();
+            }
+        #endif
+        handshakelocked = FALSE;
+    }
+    
     event void CMDSend.sendDone(message_t* msg, error_t err) {
         #ifdef MOTE_DEBUG_MESSAGES
         
@@ -457,12 +530,15 @@ implementation {
                                 void *payload,
                                 uint8_t len) {
 	    message_t *ret = msg;
+        rssi_serial_msg_t* rssim = (rssi_serial_msg_t*)payload;
 	
 	    #ifdef MOTE_DEBUG_MESSAGES
 	    
 	        if (call DiagMsg.record())
 	        {
 	            call DiagMsg.str("rlr:1");
+                call DiagMsg.uint16(rssim->dst);
+                call DiagMsg.uint32(rssim->size);
 	            call DiagMsg.send();
 	        }
 	    #endif
@@ -529,9 +605,6 @@ implementation {
     event message_t* SerialReceive.receive(message_t* msg,
             void* payload, uint8_t len) {
 
-        uint32_t time;
-        time  = call GlobalTime.getLocalTime();
-
         if (len != sizeof(cmd_serial_msg_t)) {
             call Leds.led0Toggle();
             return msg;
@@ -540,16 +613,17 @@ implementation {
             cmd_serial_msg_t* rkcm = (cmd_serial_msg_t*)call UartPacket.getPayload(&cmdpacket, sizeof(rssi_msg_t));
             cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
 
-            rkcm->cmd   = rcm->cmd;
-            rkcm->dst   = rcm->dst;
-            rkcm->channel = rcm->channel;
-            
-            currentCommand = rcm->cmd;
+            currentCMD = rcm->cmd;
             currentChannel = rcm->channel;
-            currentdst     = rcm->dst;
+            currentDST     = rcm->dst;
+
+            rkcm->cmd   = rcm->cmd;
+            // rkcm->dst   = rcm->dst;
+            rkcm->dst   = TOS_NODE_ID;
+            rkcm->channel = rcm->channel;
 
             /*            
-            if (currentCommand == CMD_DOWNLOAD || currentCommand == CMD_CHANNEL) { 
+            if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL) { 
                 if (currentChannel != call CC2420Config.getChannel()) {
                     post changeChannelTask();
                 }
@@ -562,7 +636,7 @@ implementation {
             } 
             */
 
-            if (currentCommand == CMD_CHANNEL) { 
+            if (currentCMD == CMD_CHANNEL) { 
                 post changeChannelTask();
             }
             else {

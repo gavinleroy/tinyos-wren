@@ -73,6 +73,9 @@ implementation {
   App.RssiLogReceive   -> TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
   App.CMDSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
   
+  App.HandShakeReceive       -> TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
+  App.HandShakeSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
+  
   App.BaseCMDReceive   -> TimeSyncMessageC.Receive[AM_BASE_MSG];
   App.BaseStatusSend   -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
 

@@ -45,6 +45,7 @@ module CUSPBaseRecorderP {
         interface AMSend as UartSend; // serial rssi send
         interface AMSend as WRENSend; // serial rssi send
         interface AMSend as SerialBaseStatusSend; //base serial status send
+        interface AMSend as SerialHandShakeSend; //base serial status send
         interface Receive as SerialReceive;
         interface Packet as UartPacket;
         interface AMPacket as UartAMPacket;
@@ -52,6 +53,7 @@ module CUSPBaseRecorderP {
         interface TimeSyncAMSend<TMilli,uint32_t> as CMDSend;
         interface Receive as CMDReceive; // cmd receive
         interface Receive as WRENReceive; // wren receive
+        interface Receive as HandShakeReceive; // cmd receive
 
         interface TimeSyncAMSend<TMilli,uint32_t> as BaseCMDSend;
         interface Receive as BaseStatusReceive; // base receive
@@ -129,6 +131,7 @@ implementation {
     bool cmdlocked = FALSE;
     bool amsendlocked = FALSE;
     bool basestatuslocked = FALSE;
+    bool handshakelocked = FALSE;
 
     uint16_t currentCommand;
     uint8_t currentChannel;
@@ -242,6 +245,10 @@ implementation {
         post wrenSendTask();
     }
 
+    event void SerialHandShakeSend.sendDone(message_t* msg, error_t err) {
+        handshakelocked = FALSE;
+    }
+
     event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
         basestatuslocked = FALSE;
     }
@@ -294,6 +301,33 @@ implementation {
 	    post radioSendTask();
     }
 
+     event message_t * HandShakeReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+
+        if (call RadioAMPacket.isForMe(msg)) {
+            if (len != sizeof(wren_handshake_msg_t)) {
+                call Leds.led0Toggle();
+                return msg;
+            }
+            else {
+	            if(!handshakelocked) {
+		       #ifdef MOTE_DEBUG_MESSAGES
+		        
+		            if (call DiagMsg.record())
+		            {
+		                call DiagMsg.str("bsr:3");
+		                call DiagMsg.send();
+		            }
+		        #endif
+		                if (call SerialHandShakeSend.send(AM_BROADCAST_ADDR, msg, sizeof(wren_handshake_msg_t)) == SUCCESS) {
+		                    handshakelocked = TRUE;
+		                }
+		            }
+	            }
+        }
+        return msg;
+    }
      event message_t * BaseStatusReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {

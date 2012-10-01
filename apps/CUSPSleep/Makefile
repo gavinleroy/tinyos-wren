@@ -1,7 +1,7 @@
 COMPONENT=CUSPBaseRecorderC
 
-BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py
-CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py
+BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENHandShakeMsg.py
+CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENHandShakeMsg.py
 
 CmdSerialMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=CmdSerialMsg CUSPSerial.h cmd_serial_msg -o $@
@@ -18,6 +18,9 @@ BaseStatusMsg.py: CUSPSerial.h
 WRENStatusMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=WRENStatusMsg CUSPSerial.h wren_status_msg -o $@
 
+WRENHandShakeMsg.py: CUSPSerial.h
+	    mig python -target=null $(CFLAGS) -python-classname=WRENHandShakeMsg CUSPSerial.h wren_handshake_msg -o $@
+
 PFLAGS += -DTIMESYNC_RATE=10
 
 PFLAGS += -I$(TOSDIR)/lib/ftsp
@@ -29,9 +32,10 @@ CFLAGS += -DCC2420_DEF_RFPOWER=31
 CFLAGS += -DCC2420_SECOND_RFPOWER=31
 
 CFLAGS += -DLOW_POWER_LISTENING
-CFLAGS += -DLPL_INTERVAL=512
+#CFLAGS += -DLPL_INTERVAL=512
+CFLAGS += -DLPL_DEFAULT_INTERVAL=512
 CFLAGS += -DLPL_DEF_LOCAL_WAKEUP=512
-CFLAGS += -DLPL_DEF_REMOTE_WAKEUP=0
+CFLAGS += -DLPL_DEF_REMOTE_WAKEUP=512
 CFLAGS += -DDELAY_AFTER_RECEIVE=20
 CFLAGS += -DREMOTE_WAKEUP_INTERVAL=512
 CFLAGS += -DLOCAL_WAKEUP_INTERVAL=512
