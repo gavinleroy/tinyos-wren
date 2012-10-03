@@ -399,7 +399,7 @@ implementation {
                 #ifdef RF233_USE_SECOND_RFPOWER
                     call PacketTransmitPower.set(&packet, RF233_SECOND_RFPOWER);
                 #endif        
-                call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
+                call LowPowerListening.setRemoteWakeupInterval(&packet, 3);
 
                 if (call RssiLogSend.send(currentDST, &packet, m_entry.len, time) == SUCCESS) {
                     #ifdef MOTE_DEBUG_MESSAGES
@@ -523,7 +523,7 @@ implementation {
 //        rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
 //        call AMSend.send(CONTROLLER_NODEID, &packet, m_entry.len);
 
-        call LowPowerListening.setRemoteWakeupInterval(&packet, 0);
+        call LowPowerListening.setRemoteWakeupInterval(&packet, 3);
         if (call RssiLogSend.send(currentDST, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
         }      
     }
