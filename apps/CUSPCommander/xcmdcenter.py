@@ -58,6 +58,7 @@ class CmdCenter:
     logSize  = {}
     
     lock = threading.RLock()
+    progressLock = threading.RLock()
     
     f = {}
     motes = []
@@ -85,6 +86,7 @@ class CmdCenter:
 #        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
         self.wrenHandShakeTimer = ResettableTimer(2, self.printHandShake)
+        self.progressTimer = ResettableTimer(10, self.checkProgress, 1)
 
         # connecting serial forwarder for all nodes
         numberOfMotes = 0
@@ -142,10 +144,11 @@ class CmdCenter:
                 self.downloadTimer.reset()
                 
                 self.logSize[m.get_dst()] = m.get_size()
-                
+
                 if (self.dl%1000) == 0:
                     sys.stdout.write(".")
                     sys.stdout.flush()
+                    #self.progressTimer.reset()
 #                    if self.check_Progress() == True:
 #                        self.downloadTimer.reset()
                 self.dl += 1
@@ -232,6 +235,29 @@ class CmdCenter:
             if m.get_src() not in self.downloaders.keys():
                 self.downloaders[m.get_src()] = 0
 
+    def checkProgress(self):
+        print "checking progress ex..."
+        restart = False
+        for baseid, nodeid in self.downloaders.iteritems(): # we can optimize this lookup
+            if nodeid > 0:
+                if nodeid not in self.logSize.keys():
+                    self.monitor_Mote(baseid, nodeid)
+                else:
+                    if self.logSize[nodeid] > 0:
+                        if self.moteLogSize[nodeid] != self.logSize[nodeid]:
+                            return True
+                        else:
+                            self.monitor_Mote(baseid, nodeid)
+                    else:
+                        return True
+            else:
+                restart = True
+        
+        if restart == True:
+            self.download_Start()
+            
+        return True
+
     def check_Progress(self):
         print "checking progress ..."
         for baseid, nodeid in self.downloaders.iteritems(): # we can optimize this lookup
@@ -279,15 +305,19 @@ class CmdCenter:
                 if self.downloadTrials[nodeid] > 5: # greater than 3 time trials, give up for the mote
                     self.downloaders[baseid] = 0
                 else:
+                    self.progressTimer.reset()    
                     self.sendDownloadCmdToController(baseid, nodeid)
                     #time.sleep(10)
             else:
                 # mote download started. Now check to see if the mote is still downloading....
                 if self.logSize[nodeid] > 0:
-                    if self.logSize[nodeid] < 10:
+                    if self.logSize[nodeid] < 20:
                         self.downloadTrials[nodeid] += 1
-                        if self.downloadTrials[nodeid] > 3: # greater than 3 time trials, give up for the mote
+                        if self.downloadTrials[nodeid] > 4: # greater than 3 time trials, give up for the mote
                             self.downloaders[baseid] = 0
+                        else:
+                            self.sendDownloadCmdToDownloader(baseid, nodeid)
+                        self.progressTimer.reset()    
                     else:
                         print "logsize", self.moteLogSize[nodeid], self.logSize[nodeid]
                         if self.moteLogSize[nodeid] != self.logSize[nodeid]:
@@ -302,6 +332,7 @@ class CmdCenter:
                                 # try to download again
                                 self.sendDownloadCmdToDownloader(baseid, nodeid)
                                 #time.sleep(10)
+                            self.progressTimer.reset()    
                 else:
                     if nodeid in self.f.keys():
                         self.f[k].flush()
@@ -442,6 +473,13 @@ class CmdCenter:
             if not self.downloadTimer.isAlive():
                 self.downloadTimer.start()
             self.downloadTimer.reset()
+            #self.downloadTimer.run()
+
+    def resetProgressTimer(self):
+        with self.lock:
+            if not self.progressTimer.isAlive():
+                self.progressTimer.start()
+            self.progressTimer.reset()
             #self.downloadTimer.run()
             
     def split_list(alist, wanted_parts=1):
@@ -654,7 +692,8 @@ class CmdCenter:
 #                self.setDownloadBaseStationChannel()
                 # start download now
                 
-                self.resetDownloadTimer()
+                #self.resetDownloadTimer()
+                self.resetProgressTimer()
                 self.download_Start()
             elif c == 'r':
                 # restore log
