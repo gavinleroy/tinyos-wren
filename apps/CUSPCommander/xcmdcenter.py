@@ -239,20 +239,17 @@ class CmdCenter:
         print "checking progress ex..."
         restart = False
         for baseid, nodeid in self.downloaders.iteritems(): # we can optimize this lookup
+            print "checking ", baseid, nodeid
             if nodeid > 0:
                 if nodeid not in self.logSize.keys():
                     self.monitor_Mote(baseid, nodeid)
                 else:
                     if self.logSize[nodeid] > 0:
-                        if self.moteLogSize[nodeid] != self.logSize[nodeid]:
-                            return True
-                        else:
+                        if self.moteLogSize[nodeid] == self.logSize[nodeid]:
                             self.monitor_Mote(baseid, nodeid)
-                    else:
-                        return True
             else:
                 restart = True
-        
+                
         if restart == True:
             self.download_Start()
             
@@ -305,8 +302,8 @@ class CmdCenter:
                 if self.downloadTrials[nodeid] > 5: # greater than 3 time trials, give up for the mote
                     self.downloaders[baseid] = 0
                 else:
-                    self.progressTimer.reset()    
                     self.sendDownloadCmdToController(baseid, nodeid)
+                    self.progressTimer.reset()    
                     #time.sleep(10)
             else:
                 # mote download started. Now check to see if the mote is still downloading....
@@ -341,6 +338,8 @@ class CmdCenter:
                     sys.stdout.write("%d Download Done\n" % (nodeid,))
                     sys.stdout.flush()
                     self.downloaders[baseid] = 0
+                    self.progressTimer.reset()    
+
                         
     def download_Start(self):
         print "download_Start mapping..."
