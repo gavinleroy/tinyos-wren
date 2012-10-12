@@ -53,8 +53,10 @@ module CUSPBaseRecorderP {
         interface TimeSyncAMSend<TMilli,uint32_t> as RssiLogSend;
         interface TimeSyncAMSend<TMilli,uint32_t> as WRENSend;
 
-        interface TimeSyncAMSend<TMilli,uint32_t> as HandShakeSend;
-        interface Receive as HandShakeReceive; // cmd receive
+        interface TimeSyncAMSend<TMilli,uint32_t> as ConnectionSend;
+        interface Receive as ConnectionReceive; // cmd receive
+
+        interface Receive as SWPAckReceive; // cmd receive
 
         interface SplitControl as SerialControl;
         interface AMSend; // serial rssi send
@@ -76,6 +78,8 @@ module CUSPBaseRecorderP {
         interface Timer<TMilli> as DownloadTimer;
         interface Timer<TMilli> as StatusRandomTimer;
         interface Timer<TMilli> as WRENRandomTimer;
+        interface Timer<TMilli> as WRENConnectionTimer;
+        interface Timer<TMilli> as WRENTimeoutTimer;
         
         interface Random;
         interface PacketField<uint8_t> as PacketRSSI;
@@ -143,7 +147,7 @@ implementation {
 
     enum {
         LOG_QUEUE_LEN = 12,
-        RADIO_QUEUE_LEN = 20,
+        WINDOW_BUFFER_LEN = WINDOWSIZE,
     };
 
     typedef uint8_t cmd_status_t;
@@ -160,14 +164,14 @@ implementation {
     message_t rssipacket;
     message_t cmdpacket;
     message_t wrenpacket;
-    message_t handshakepacket;
+    message_t connectionpacket;
 
     bool sensing = FALSE;
     bool rssilocked = FALSE;
     bool statuslocked = FALSE;
     bool cmdlocked = FALSE;
     bool wrenlocked = FALSE;
-    bool handshakelocked = FALSE;
+    bool connectionlocked = FALSE;
 
     bool sleep = FALSE;
     bool halt = FALSE;
@@ -189,14 +193,27 @@ implementation {
     uint8_t logIn, logOut;
     bool logBusy, logFull;
 
-    message_t  radioQueueBufs[RADIO_QUEUE_LEN];
-    message_t  * ONE_NOK radioQueue[RADIO_QUEUE_LEN];
+    message_t  radioQueueBufs[WINDOW_BUFFER_LEN];
+    message_t  * ONE_NOK radioQueue[WINDOW_BUFFER_LEN];
     uint8_t    radioIn, radioOut;
     bool       radioBusy, radioFull;
 
     uint16_t currentCMD;
     uint8_t currentChannel;
     uint16_t currentDST;
+	uint32_t currentClientLogSize;
+	
+    uint8_t swLowIndex;
+    uint8_t swUpperIndex;
+    uint32_t lastACKReceived;
+    uint32_t lastFrameSent;
+    uint32_t nextFrameToSend;
+    
+    FrameItem frameTable[WINDOW_BUFFER_LEN];
+    
+    uint32_t frameno;
+    
+    uint8_t connectionAttempt;
     
     task void logWriteTask();
     void sendStatus();
@@ -206,9 +223,19 @@ implementation {
     void saveSensing(bool sense);
     task void changeChannelTask();
     void process_command();
-    void sendHandShake();
+    void sendConnection();
     task void radioSendTask();
     task void rssiLogRead();
+
+    void clearFrameTable()
+    {
+        int8_t i;
+        for(i = 0; i < WINDOW_BUFFER_LEN; ++i) {
+            frameTable[i].state = ENTRY_EMPTY;
+            frameTable[i].frameno = 0;
+            frameTable[i].timeout = 0;
+        }
+    }
     
     event void Boot.booted() {
         uint8_t i;
@@ -220,18 +247,29 @@ implementation {
         logBusy = FALSE;
         logFull = TRUE;
 
-        for (i = 0; i < RADIO_QUEUE_LEN; i++)
+        for (i = 0; i < WINDOW_BUFFER_LEN; i++)
           radioQueue[i] = &radioQueueBufs[i];
         radioIn = radioOut = 0;
         radioBusy = FALSE;
         radioFull = TRUE;
+
         
         currentCMD = CMD_NONE;
         currentChannel = RF233_DEF_CHANNEL;
         currentDST = AM_BROADCAST_ADDR; //default download base station in case
+        currentClientLogSize = 0;
         
         sleep = FALSE;
         messageCount = 0;
+
+        lastACKReceived = 0;
+        lastFrameSent = 0;
+        nextFrameToSend = 0;
+        frameno = 0;
+        
+        connectionAttempt = 0;
+        
+        clearFrameTable();
         
   #ifdef DISSEMINATION_ON
         call CommandValue.set(&currentCMD);
@@ -313,7 +351,6 @@ implementation {
         }
     }
 
-
     event void Config.writeDone(storage_addr_t addr, void *buf, 
             storage_len_t len, error_t err) {
         // Verify addr and len
@@ -372,255 +409,43 @@ implementation {
     event void SerialControl.stopDone(error_t err) {
     }
 
-    event void DownloadTimer.fired() {
-        #ifdef MOTE_DEBUG_MESSAGES
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("dt-f:1");
-                call DiagMsg.send();
-            }
-        #endif
-                
-        if (logIn == logOut && !logFull)
-        {
-            post rssiLogRead();
-            
-            /*
-            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                // need to do somthing
-            }
-            */
-        }
-        else {
-            call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
-        }
-    }
-
-    event void LogRead.readDone(void* buf, storage_len_t len, error_t err) {
-        uint32_t time;
-        rssi_serial_msg_t* rcm;
-        
-        #ifdef MOTE_DEBUG_MESSAGES
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("lr-rd:0");
-                call DiagMsg.send();
-            }
-        #endif
-
-        if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
-            #ifdef MOTE_DEBUG_MESSAGES
-            
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("lr-rd:1");
-                    call DiagMsg.send();
-                }
-            #endif
-            atomic
-            if (!radioFull) 
-            {
-            #ifdef MOTE_DEBUG_MESSAGES
-            
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("lr-rd:2");
-                    call DiagMsg.send();
-                }
-            #endif
-//                rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
-	            rcm = (rssi_serial_msg_t*)call Packet.getPayload(radioQueue[radioIn], sizeof(rssi_serial_msg_t));
-
-                memcpy(rcm, &(m_entry.msg), m_entry.len);
-//                memcpy(radioQueue[radioIn], buf, len);
-                rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-
-            #ifdef MOTE_DEBUG_MESSAGES
-            
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("lr-rd:3");
-                    call DiagMsg.uint32(rcm->size);
-                    call DiagMsg.send();
-                }
-            #endif
-
-                if (++radioIn >= RADIO_QUEUE_LEN) {
-                    radioIn = 0;
-                }                    
-
-                if (radioIn == radioOut)
-                    radioFull = TRUE;
-                
-                if (!radioBusy)
-                {
-                    post radioSendTask();
-                    radioBusy = TRUE;
-                }                
-            }
-
-            if (!stopDownload && !radioFull) {            
-                post rssiLogRead();
-                /*
-                if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                    // Handle error.
-                    #ifdef MOTE_DEBUG_MESSAGES
-                        if (call DiagMsg.record())
-                        {
-                            call DiagMsg.str("rls-sd:e");
-                            call DiagMsg.send();
-                        }
-                    #endif
-                }
-                */   
-            }
-        
-//                if (call RssiLogSend.send(AM_BROADCAST_ADDR, &packet, sizeof(rssi_serial_msg_t), time) == SUCCESS) {
-//                }
-                
-        }
-        else {
-            // log is empty..., set the busy flag to false
-            download = 1;
-            
-            // reset to default
-            logIn = logOut = 0;
-            logBusy = FALSE;
-            logFull = FALSE;
-                        
-            sendStatus();
-            
-            sendStatusToController();
-            
-/* don't erase log            
-            if (call LogWrite.erase() == SUCCESS) {
-            // Reached to the end of log. Let's erase so that LogRead and LogWrite.currentOffset become equal
-                isErased = 1;
-                sendStatus();
-            }
-*/                        
-        }
-    }
-
-    task void radioSendTask() {
-        uint32_t time;
-        
-        // Check to see if all logs are already appended         
-        atomic {
-          if (radioIn == radioOut && !radioFull)
-                {
-                    radioBusy = FALSE;
-                    return;
-                }
-        }
-
-        time  = call GlobalTime.getLocalTime();
-        call Leds.led2On();
-        
-        //call Packet.clear(radioQueue[radioOut]);
-        
-        #ifdef RF233_USE_SECOND_RFPOWER
-            call PacketTransmitPower.set(radioQueue[radioOut], RF233_SECOND_RFPOWER);
-        #endif        
-        call LowPowerListening.setRemoteWakeupInterval(radioQueue[radioOut], 3);
-
-        #ifdef MOTE_DEBUG_MESSAGES
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("rst:0");
-                call DiagMsg.send();
-            }
-        #endif
-                
-        // Start ack timer
-        if (call RssiLogSend.send(currentDST, radioQueue[radioOut], sizeof(rssi_serial_msg_t), time) == SUCCESS) {
-            call Leds.led0Toggle();
-        }
-        else {
-            // failed. try again
-            post radioSendTask();
-        }
-    }
-
-    task void rssiLogRead() 
-    {
-        if (!stopDownload) {            
-            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-            }
-        }            
-    }
-    
-    event void RssiLogSend.sendDone(message_t* msg, error_t err) {
-
-#ifdef MOTE_DEBUG_MESSAGES
-    if (call DiagMsg.record())
-    {
-        call DiagMsg.str("rls-sd:1");
-        call DiagMsg.send();
-    }
-#endif
-
-        call Leds.led2Off();
-        if (err == SUCCESS) {
-            //call Packet.clear(&packet);
-		      atomic
-		    if (msg == radioQueue[radioOut])
-		      {
-		        if (++radioOut >= RADIO_QUEUE_LEN)
-		          radioOut = 0;
-		        if (radioFull)
-		          radioFull = FALSE;
-		      }
-            
-
-            
-        }
-        else {
-        }
-
-        post radioSendTask();
-        
-        if (!radioFull && !stopDownload) {
-            post rssiLogRead();
-        }        
-    }
-    
-    event void AMSend.sendDone(message_t* msg, error_t err) {
-
-#ifdef MOTE_DEBUG_MESSAGES
-    if (call DiagMsg.record())
-    {
-        call DiagMsg.str("as");
-        call DiagMsg.send();
-    }
-#endif
-
-        call Leds.led1Off();
-        if ( (err == SUCCESS) && (msg == &packet) ) {
-            call Packet.clear(&packet);
-            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
-                // Handle error.
-            }
-        }
-        else {
-            call LogSendTimer.startOneShot(INTER_PACKET_INTERVAL);
-        }
-    }
-
-    event void RssiSend.sendDone(message_t* msg, error_t err) {
-        rssilocked = FALSE;
-    }
-
-    event void SerialStatusSend.sendDone(message_t* msg, error_t err) {
-        statuslocked = FALSE;
-    }
-
-    event void LogSendTimer.fired() {
-        post radioSendTask();
-    }
 
     event void RandomTimer.fired() {
         call SensingTimer.startPeriodic(SENSING_INTERVAL);
+    }
+
+    event void HeartbeatTimer.fired() {
+//        uint32_t time;
+
+        call Leds.led1On();
+        call LedOffTimer.startOneShot(LED_INTERVAL);
+        if(TOS_NODE_ID == TIMESYNC_NODEID)
+        {
+            // we should send a status update to keep time.
+            // sendStatus();
+            sendStatusToController();
+
+        }
+        
+        call BatteryRead.read();
+/*
+        // safe global time in configuration
+        time  = call GlobalTime.getLocalTime();
+        if(call GlobalTime.local2Global(&time) != SUCCESS) {
+            // not synced... set global time to 0
+            //time = 0;
+            // we ignore this for now. the local storage will show is
+            // this node is synced or not.
+        }
+        conf.globaltime = time;
+        call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
+*/
+    }
+
+    event void LedOffTimer.fired() {
+        call Leds.led0Off();
+        call Leds.led1Off();
+        call Leds.led2Off();
     }
 
     event void SensingTimer.fired() {
@@ -689,6 +514,331 @@ implementation {
         sendWRENStatus();
     }
 
+    event void WRENConnectionTimer.fired() {
+		if (connectionAttempt < CONNECTION_ATTEMPT) {
+		    connectionAttempt++;
+        	sendConnection();
+        } else {
+			// give up now after # of trials        	
+        	call WRENConnectionTimer.stop();
+        }
+    }
+
+    event void WRENTimeoutTimer.fired() {
+
+        if (connectionAttempt < TRANSMIT_ATTEMPT) {
+            connectionAttempt++;
+            sendConnection();
+        } else {
+            // give up now after # of trials            
+            call WRENConnectionTimer.stop();
+        }
+    }
+
+    event void LogSendTimer.fired() {
+        post radioSendTask();
+    }
+
+    event void DownloadTimer.fired() {
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("dt-f:1");
+                call DiagMsg.send();
+            }
+        #endif
+                
+        if (logIn == logOut && !logFull)
+        {
+            post rssiLogRead();
+        }
+        else {
+            call DownloadTimer.startOneShot(DOWNLOAD_BUSYWAIT_INTERVAL);
+        }
+    }
+
+    task void rssiLogRead() 
+    {
+        if (!stopDownload) {            
+            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+            }
+        }            
+    }
+
+	uint8_t getFrameNo(uint32_t logsize) {
+		uint8_t frameidx;
+		frameidx = (currentClientLogSize - logsize) % WINDOW_BUFFER_LEN;
+		return frameidx; 
+	}
+	
+    event void LogRead.readDone(void* buf, storage_len_t len, error_t err) {
+        rssi_serial_msg_t* rcm;
+        
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("lr-rd:0");
+                call DiagMsg.send();
+            }
+        #endif
+
+        if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("lr-rd:1");
+                    call DiagMsg.send();
+                }
+            #endif
+            atomic {
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("lr-rd:2");
+                    call DiagMsg.send();
+                }
+            #endif
+//                rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
+	            rcm = (rssi_serial_msg_t*)call Packet.getPayload(radioQueue[radioIn], sizeof(rssi_serial_msg_t));
+
+                memcpy(rcm, &(m_entry.msg), m_entry.len);
+//                memcpy(radioQueue[radioIn], buf, len);
+                rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
+
+	            frameTable[radioIn].state = ENTRY_EMPTY;
+	            frameTable[radioIn].frameno = rcm->size;
+	            frameTable[radioIn].timeout = 0;
+            				
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("lr-rd:3");
+                    call DiagMsg.uint32(rcm->size);
+                    call DiagMsg.send();
+                }
+            #endif
+				
+				radioOut = radioIn;				
+
+                if (++radioIn >= WINDOW_BUFFER_LEN) {
+                    radioIn = 0;
+                }                    
+
+                post radioSendTask();
+            }
+
+            #ifdef MOTE_DEBUG_MESSAGES
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("lr-rd:5");
+                    call DiagMsg.uint32(nextFrameToSend);
+                    call DiagMsg.uint32(lastFrameSent);
+                    call DiagMsg.send();
+                }
+            #endif
+
+            if (!stopDownload && (nextFrameToSend < lastFrameSent)) {            
+                post rssiLogRead();
+            }
+        }
+        else {
+            // log is empty..., set the busy flag to false
+            download = 1;
+            
+            // reset to default
+            logIn = logOut = 0;
+            logBusy = FALSE;
+            logFull = FALSE;
+                        
+            sendStatus();
+            
+            sendStatusToController();
+            
+/* don't erase log            
+            if (call LogWrite.erase() == SUCCESS) {
+            // Reached to the end of log. Let's erase so that LogRead and LogWrite.currentOffset become equal
+                isErased = 1;
+                sendStatus();
+            }
+*/                        
+        }
+    }
+
+    task void radioSendTask() {
+        uint32_t time;
+        
+        time  = call GlobalTime.getLocalTime();
+        call Leds.led2On();
+        
+        //call Packet.clear(radioQueue[radioOut]);
+        
+        #ifdef RF233_USE_SECOND_RFPOWER
+            call PacketTransmitPower.set(radioQueue[radioOut], RF233_SECOND_RFPOWER);
+        #endif        
+        call LowPowerListening.setRemoteWakeupInterval(radioQueue[radioOut], 3);
+
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("rst:0");
+                call DiagMsg.send();
+            }
+        #endif
+                
+        // Start ack timer
+        if (call RssiLogSend.send(currentDST, radioQueue[radioOut], sizeof(rssi_serial_msg_t), time) == SUCCESS) {
+            call Leds.led0Toggle();
+        }
+        else {
+            // failed. try again
+            post radioSendTask();
+        }
+    }
+
+    event void RssiLogSend.sendDone(message_t* msg, error_t err) {
+
+#ifdef MOTE_DEBUG_MESSAGES
+    if (call DiagMsg.record())
+    {
+        call DiagMsg.str("rls-sd:1");
+        call DiagMsg.send();
+    }
+#endif
+
+        call Leds.led2Off();
+        if (err == SUCCESS) {
+            //call Packet.clear(&packet);
+		      atomic
+            if (msg == radioQueue[radioOut]) {
+                
+            	if (lastFrameSent > frameTable[radioOut].frameno) {
+            		lastFrameSent = frameTable[radioOut].frameno;
+            	}
+            }
+
+#ifdef MOTE_DEBUG_MESSAGES
+    if (call DiagMsg.record())
+    {
+        call DiagMsg.str("rls-sd:2");
+        call DiagMsg.uint32(lastFrameSent);
+        call DiagMsg.send();
+    }
+#endif
+            
+            /*
+		      atomic
+		    if (msg == radioQueue[radioOut])
+		      {
+		        if (++radioOut >= WINDOW_BUFFER_LEN) {
+		          radioOut = 0;
+		        }
+		        if (radioFull)
+		          radioFull = FALSE;
+		      }
+		      */
+		      
+        }
+        else {
+	        post radioSendTask();
+        }
+
+        
+//        if (!radioFull && !stopDownload) {
+//            post rssiLogRead();
+//        }        
+    }
+    
+  event message_t * SWPAckReceive.receive(message_t *msg,
+                            void *payload,
+                            uint8_t len) {
+    wren_swp_msg_t* rcm;
+
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ack:0");
+                call DiagMsg.send();
+            }
+        #endif
+    
+    if (call AMPacket.isForMe(msg)) {
+        if (len != sizeof(wren_swp_msg_t)) {
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            // wren_swp_msg_t* rcm = (wren_swp_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(wren_swp_msg_t));
+            rcm = (wren_swp_msg_t*)payload;
+            
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ack:1");
+                call DiagMsg.uint32(lastACKReceived);
+                call DiagMsg.uint32(rcm->seqNumToAck);
+                call DiagMsg.send();
+            }
+        #endif
+
+            if (rcm->seqNumToAck > lastACKReceived) // ignore, we already got this ACK.
+            	return msg;
+            	
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ack:2");
+                call DiagMsg.send();
+            }
+        #endif
+
+            lastACKReceived = rcm->seqNumToAck;
+            // ex) seqNum = 112, next should be 111
+            
+            nextFrameToSend = lastACKReceived - WINDOW_BUFFER_LEN;
+            // stopDownload = FALSE;
+
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ack:3");
+                call DiagMsg.uint32(lastACKReceived);
+                call DiagMsg.uint32(nextFrameToSend);
+                call DiagMsg.send();
+            }
+        #endif
+
+			// Now read more data and send    
+			if (!stopDownload && (nextFrameToSend < lastFrameSent)) 
+			{        
+            	post rssiLogRead();
+            }
+            
+            //lastFrameSent = lastACKReceived + WINDOW_BUFFER_LEN;
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ack:1");
+                call DiagMsg.uint32(lastACKReceived);
+                call DiagMsg.send();
+            }
+        #endif
+        }
+    }
+    return msg;
+  }
+
+    event void RssiSend.sendDone(message_t* msg, error_t err) {
+        rssilocked = FALSE;
+    }
+
+    event void SerialStatusSend.sendDone(message_t* msg, error_t err) {
+        statuslocked = FALSE;
+    }
+
     void sendStatus()
     {
         uint32_t time;
@@ -717,40 +867,6 @@ implementation {
                 statuslocked = TRUE;
             }
         }
-    }
-
-    event void HeartbeatTimer.fired() {
-//        uint32_t time;
-
-        call Leds.led1On();
-        call LedOffTimer.startOneShot(LED_INTERVAL);
-        if(TOS_NODE_ID == TIMESYNC_NODEID)
-        {
-            // we should send a status update to keep time.
-            // sendStatus();
-            sendStatusToController();
-
-        }
-        
-        call BatteryRead.read();
-/*
-        // safe global time in configuration
-        time  = call GlobalTime.getLocalTime();
-        if(call GlobalTime.local2Global(&time) != SUCCESS) {
-            // not synced... set global time to 0
-            //time = 0;
-            // we ignore this for now. the local storage will show is
-            // this node is synced or not.
-        }
-        conf.globaltime = time;
-        call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
-*/
-    }
-
-    event void LedOffTimer.fired() {
-        call Leds.led0Off();
-        call Leds.led1Off();
-        call Leds.led2Off();
     }
 
     event void LogWrite.eraseDone(error_t err) {
@@ -880,11 +996,12 @@ implementation {
             }
         #endif
         
+		connectionAttempt = 0;
         switch(currentCMD)
         {
             case CMD_DOWNLOAD:
-                sendHandShake();
-                
+                //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+                sendConnection();
                 // post startDownload();
                 break;
 
@@ -1066,12 +1183,12 @@ implementation {
             }
     }
 
-    void sendHandShake()
+    void sendConnection()
     {
         uint32_t time;
-        wren_handshake_msg_t* sm;
+        wren_connection_msg_t* sm;
         time  = call GlobalTime.getLocalTime();
-        sm = (wren_handshake_msg_t*)call Packet.getPayload(&handshakepacket, sizeof(wren_handshake_msg_t));
+        sm = (wren_connection_msg_t*)call Packet.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
 
         #ifdef MOTE_DEBUG_MESSAGES
             if (call DiagMsg.record())
@@ -1081,7 +1198,9 @@ implementation {
             }
         #endif
 
-        if(!handshakelocked) {
+		currentClientLogSize = 0;
+		
+        if(!connectionlocked) {
 
             if (sm == NULL) {
                 return;
@@ -1093,22 +1212,116 @@ implementation {
             sm->channel = call RadioChannel.getChannel();
             sm->isAcked = 0;
             
+            currentClientLogSize = sm->logsize;
+            lastACKReceived = sm->logsize;
+            lastFrameSent = sm->logsize;
+            nextFrameToSend = sm->logsize;
+            
             #ifdef RF233_USE_SECOND_RFPOWER
-                call PacketTransmitPower.set(&handshakepacket, RF233_SECOND_RFPOWER);
+                call PacketTransmitPower.set(&connectionpacket, RF233_SECOND_RFPOWER);
             #endif        
     
-            call LowPowerListening.setRemoteWakeupInterval(&handshakepacket, 0);
+            call LowPowerListening.setRemoteWakeupInterval(&connectionpacket, 3);
+
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("shs:1");
+                call DiagMsg.uint16(currentDST);
+                call DiagMsg.send();
+            }
+        #endif
     
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-            if (call HandShakeSend.send(currentDST, &handshakepacket, sizeof(wren_handshake_msg_t), time) == SUCCESS) {
-                handshakelocked = TRUE;
+            if (call ConnectionSend.send(currentDST, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
+                connectionlocked = TRUE;
             }
         }
     }
 
-    event void HandShakeSend.sendDone(message_t* msg, error_t err) {
-        handshakelocked = FALSE;
+    event void ConnectionSend.sendDone(message_t* msg, error_t err) {
+        connectionlocked = FALSE;
     }
+
+  event message_t * ConnectionReceive.receive(message_t *msg,
+                            void *payload,
+                            uint8_t len) {
+    wren_connection_msg_t* rcm;
+    
+    #ifdef MOTE_DEBUG_MESSAGES
+        if (call DiagMsg.record())
+        {
+            call DiagMsg.str("hsr:0");
+            call DiagMsg.send();
+        }
+    #endif
+
+    if (call AMPacket.isForMe(msg)) {
+        #ifdef MOTE_DEBUG_MESSAGES
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("hsr:1");
+                call DiagMsg.send();
+            }
+        #endif
+
+        if (len != sizeof(wren_connection_msg_t)) {
+            #ifdef MOTE_DEBUG_MESSAGES
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("hsr:e");
+                    call DiagMsg.send();
+                }
+            #endif
+            
+            call Leds.led0Toggle();
+            return msg;
+        }
+        else {
+            // stop the connection timer 
+            call WRENConnectionTimer.stop();
+
+            #ifdef MOTE_DEBUG_MESSAGES
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("hsr:2");
+                    call DiagMsg.send();
+                }
+            #endif
+
+            // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+    
+            rcm = (wren_connection_msg_t*)payload;
+            
+            call Leds.led1On();
+            
+            currentCMD = rcm->cmd;
+            currentChannel = rcm->channel;        
+            currentDST = rcm->dst;
+            
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("hsr:3");
+                        call DiagMsg.uint16(currentCMD);
+                        call DiagMsg.uint16(currentChannel);
+                        call DiagMsg.uint16(currentDST);
+                        call DiagMsg.send();
+                    }
+                #endif
+            
+            
+            if (rcm->isAcked == 1) {
+                post startDownload();
+            }
+            else {
+                // change back to normal channel 11 or random backoff and try again
+            }
+        }
+    }
+    return msg;
+  }
 
     event void CMDSend.sendDone(message_t* msg, error_t err) {
         cmdlocked = FALSE;
@@ -1118,69 +1331,6 @@ implementation {
         wrenlocked = FALSE;
     }
 
-	  event message_t * HandShakeReceive.receive(message_t *msg,
-	                            void *payload,
-	                            uint8_t len) {
-	    wren_handshake_msg_t* rcm;
-	    
-	    #ifdef MOTE_DEBUG_MESSAGES
-	        if (call DiagMsg.record())
-	        {
-	            call DiagMsg.str("hsr:0");
-	            call DiagMsg.send();
-	        }
-	    #endif
-	
-	    if (call AMPacket.isForMe(msg)) {
-	        #ifdef MOTE_DEBUG_MESSAGES
-	            if (call DiagMsg.record())
-	            {
-	                call DiagMsg.str("hsr:1");
-	                call DiagMsg.send();
-	            }
-	        #endif
-	
-	        if (len != sizeof(wren_handshake_msg_t)) {
-	            #ifdef MOTE_DEBUG_MESSAGES
-	                if (call DiagMsg.record())
-	                {
-	                    call DiagMsg.str("hsr:e");
-	                    call DiagMsg.send();
-	                }
-	            #endif
-	            
-	            call Leds.led0Toggle();
-	            return msg;
-	        }
-	        else {
-	            #ifdef MOTE_DEBUG_MESSAGES
-	                if (call DiagMsg.record())
-	                {
-	                    call DiagMsg.str("hsr:2");
-	                    call DiagMsg.send();
-	                }
-	            #endif
-	
-	            // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
-	    
-	            rcm = (wren_handshake_msg_t*)payload;
-	            
-	            call Leds.led1On();
-	            
-	            currentCMD = rcm->cmd;
-	            currentChannel = rcm->channel;        
-	            currentDST = rcm->dst;
-	            
-	            if (rcm->isAcked == 1) {
-                    post startDownload();
-                }
-                else {
-                    // change back to normal channel 11 or random backoff and try again
-                }
-	        }
-	    }
-	    return msg;
-	  }
 
   event message_t * CMDReceive.receive(message_t *msg,
                             void *payload,
@@ -1234,6 +1384,18 @@ implementation {
             currentCMD = rcm->cmd;
             currentChannel = rcm->channel;        
             currentDST = rcm->dst;
+
+                #ifdef MOTE_DEBUG_MESSAGES
+                
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("cmdR:3");
+                        call DiagMsg.uint16(currentCMD);
+                        call DiagMsg.uint16(currentChannel);
+                        call DiagMsg.uint16(currentDST);
+                        call DiagMsg.send();
+                    }
+                #endif
             
             if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL_RESET) {    
                 post changeChannelTask();
@@ -1534,4 +1696,28 @@ implementation {
             post setBatteryLevel();
         }
     }
+
+    event void AMSend.sendDone(message_t* msg, error_t err) {
+
+#ifdef MOTE_DEBUG_MESSAGES
+    if (call DiagMsg.record())
+    {
+        call DiagMsg.str("as");
+        call DiagMsg.send();
+    }
+#endif
+
+        call Leds.led1Off();
+        if ( (err == SUCCESS) && (msg == &packet) ) {
+            call Packet.clear(&packet);
+            if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+                // Handle error.
+            }
+        }
+        else {
+            call LogSendTimer.startOneShot(INTER_PACKET_INTERVAL);
+        }
+    }
+
+    
 }

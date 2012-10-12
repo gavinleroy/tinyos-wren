@@ -53,14 +53,18 @@ typedef nx_struct wren_status_msg {
     nx_uint32_t buffersize;
 } wren_status_msg_t;
 
-typedef nx_struct wren_handshake_msg {
+typedef nx_struct wren_connection_msg {
     nx_uint16_t src;
     nx_uint16_t dst;
     nx_uint16_t cmd;
     nx_uint32_t logsize;
     nx_uint8_t channel;
     nx_uint8_t isAcked;
-} wren_handshake_msg_t;
+} wren_connection_msg_t;
+
+typedef nx_struct wren_swp_msg {
+    nx_uint32_t seqNumToAck;
+} wren_swp_msg_t;
 
 typedef nx_struct base_status_msg {
     nx_uint16_t src;
@@ -80,6 +84,7 @@ enum {
   AM_WREN_STATUS_MSG = 0x70,
   AM_BASE_MSG = 0x60,
   AM_HANDSHAKE_MSG = 0x50,
+  AM_SWP_MSG = 0x40,
 };
 
 enum {
@@ -97,5 +102,18 @@ enum {
     CMD_CHANNEL_RESET   = 11,
     CMD_WREN_STATUS     = 12,
 };
+
+enum {
+    ENTRY_EMPTY = 0,
+    ENTRY_FULL = 1,
+};
+
+typedef struct FrameItem
+{
+    uint8_t     state;
+    uint32_t    frameno;
+    uint32_t    timeout;
+} FrameItem;
+
 
 #endif

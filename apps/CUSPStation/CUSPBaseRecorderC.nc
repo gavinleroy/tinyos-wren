@@ -32,11 +32,10 @@
  
 /**
  *
- * @author Thomas Schmid
- * @date   Apr 19, 2012
+ * @author Kyeong T. Min
+ * @date   Oct 8, 2012
  */
 #include <Timer.h>
-#include "StorageVolumes.h"
 #include "CUSPSerial.h"
 
 configuration CUSPBaseRecorderC {
@@ -45,63 +44,30 @@ implementation {
   components MainC;
   components LedsC;
   components CUSPBaseRecorderP as App;
-  components ActiveMessageC;
-  components new TimerMilliC() as Timer0;
-  components new TimerMilliC() as RandomTimer2;
 
+  components ActiveMessageC;
   components SerialActiveMessageC as SAM;
-  components CC2420ActiveMessageC;
-  components CC2420ControlC;
   
-  components TimeSyncC;
+  components RF233ActiveMessageC;
+  components RF233TimeSyncMessageC;
+
   components TimeSyncMessageC;
   
-  MainC.SoftwareInit -> TimeSyncC;
-  TimeSyncC.Boot -> MainC;
-
-  App.GlobalTimeSet -> TimeSyncC;
 
   App.Boot -> MainC;
   App.Leds -> LedsC;
 
-  App.RadioPacket      -> TimeSyncMessageC;
-  App.RadioAMPacket    -> TimeSyncMessageC;
   App.RadioControl     -> ActiveMessageC;
-  App.TimeSyncPacket   -> TimeSyncMessageC;
 
-  App.CMDReceive       -> TimeSyncMessageC.Receive[AM_CMD_MSG];
-  App.RssiLogReceive   -> TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
-  App.CMDSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
+  App.RadioPacket      -> RF233TimeSyncMessageC;
+  App.RadioAMPacket    -> RF233TimeSyncMessageC;
+  App.RadioReceive   -> RF233TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
   
-  App.ConnectionReceive       -> TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
-  App.ConnectionSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
-  
-  App.BaseCMDReceive   -> TimeSyncMessageC.Receive[AM_BASE_MSG];
-  App.BaseStatusSend   -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
-
-  App.SWPAckSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_SWP_MSG];
-
   App.UartSend         -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialControl    -> SAM;
-  App.SerialBaseStatusSend -> SAM.AMSend[AM_BASE_STATUS_MSG];
-  App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
   App.UartPacket       -> SAM;
   App.UartAMPacket     -> SAM;  
   //App.Snoop -> ActiveMessageC.Snoop;
-
-  App.Timer0         -> Timer0;
-  App.RandomTimer2   -> RandomTimer2;
-
-  components RandomC;
-  App.Random -> RandomC;
-  MainC.SoftwareInit -> RandomC.Init;
-    
-  App.GlobalTime -> TimeSyncC;
-
-  App.LowPowerListening -> TimeSyncMessageC;
-
-  App -> CC2420ActiveMessageC.CC2420Packet;
-  App -> CC2420ControlC.CC2420Config;
 
   #ifdef MOTE_DEBUG
     components DiagMsgC;

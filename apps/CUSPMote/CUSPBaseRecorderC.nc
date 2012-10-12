@@ -59,6 +59,8 @@ implementation {
   components new TimerMilliC() as BatteryTimer;
   components new TimerMilliC() as DownloadTimer;
   components new TimerMilliC() as WRENRandomTimer;
+  components new TimerMilliC() as WRENConnectionTimer;
+  components new TimerMilliC() as WRENTimeoutTimer;
 
   components SerialActiveMessageC as SAM;
   
@@ -92,8 +94,10 @@ implementation {
   App.WRENSend         -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_WREN_STATUS_MSG];
   App.RssiLogSend      -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_RSSI_SERIAL_MSG];
 
-  App.HandShakeReceive       -> RF233TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
-  App.HandShakeSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
+  App.ConnectionReceive       -> RF233TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
+  App.ConnectionSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
+
+  App.SWPAckReceive       -> RF233TimeSyncMessageC.Receive[AM_SWP_MSG];
 
   App.AMSend           -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialStatusSend -> SAM.AMSend[AM_SERIAL_STATUS_MSG];
@@ -115,6 +119,8 @@ implementation {
   App.BatteryTimer   -> BatteryTimer;
   App.DownloadTimer  -> DownloadTimer;
   App.WRENRandomTimer -> WRENRandomTimer;
+  App.WRENConnectionTimer -> WRENConnectionTimer;
+  App.WRENTimeoutTimer -> WRENTimeoutTimer;
   
   components RandomC;
   App.Random -> RandomC;

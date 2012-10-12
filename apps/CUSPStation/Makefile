@@ -1,7 +1,7 @@
 COMPONENT=CUSPBaseRecorderC
 
-BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENConnectionMsg.py
-CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENConnectionMsg.py
+BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENHandShakeMsg.py
+CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENHandShakeMsg.py
 
 CmdSerialMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=CmdSerialMsg CUSPSerial.h cmd_serial_msg -o $@
@@ -18,44 +18,40 @@ BaseStatusMsg.py: CUSPSerial.h
 WRENStatusMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=WRENStatusMsg CUSPSerial.h wren_status_msg -o $@
 
-WRENConnectionMsg.py: CUSPSerial.h
-	    mig python -target=null $(CFLAGS) -python-classname=WRENConnectionMsg CUSPSerial.h wren_connection_msg -o $@
+WRENHandShakeMsg.py: CUSPSerial.h
+	    mig python -target=null $(CFLAGS) -python-classname=WRENHandShakeMsg CUSPSerial.h wren_handshake_msg -o $@
 
 PFLAGS += -DTIMESYNC_RATE=10
 
 PFLAGS += -I$(TOSDIR)/lib/ftsp
 PFLAGS += -I$(TOSDIR)/lib/diagmsg
 
-CFLAGS += -DCC2420_DEF_CHANNEL=11
+CFLAGS += -DRF233_DEF_CHANNEL=20
 
-CFLAGS += -DCC2420_DEF_RFPOWER=31
-CFLAGS += -DCC2420_SECOND_RFPOWER=31
+CFLAGS += -DRF233_RSSI_ENERGY
+CFLAGS += -DRF233_RX_PDT_LEVEL_VAL=0x03
+CFLAGS += -DRF233_DEF_RFPOWER=0x00
+CFLAGS += -DRF233_SECOND_RFPOWER=0x0F
 
-CFLAGS += -DLOW_POWER_LISTENING
-CFLAGS += -DLPL_INTERVAL=512
-CFLAGS += -DLPL_DEF_LOCAL_WAKEUP=0
-CFLAGS += -DLPL_DEF_REMOTE_WAKEUP=512
-CFLAGS += -DDELAY_AFTER_RECEIVE=20
-CFLAGS += -DREMOTE_WAKEUP_INTERVAL=512
-CFLAGS += -DLOCAL_WAKEUP_INTERVAL=0
+#CFLAGS += -DLOW_POWER_LISTENING
+#CFLAGS += -DLPL_INTERVAL=512
+#CFLAGS += -DLPL_DEF_LOCAL_WAKEUP=512
+#CFLAGS += -DLPL_DEF_REMOTE_WAKEUP=512
+#CFLAGS += -DDELAY_AFTER_RECEIVE=20
+#CFLAGS += -DREMOTE_WAKEUP_INTERVAL=512
+#CFLAGS += -DLOCAL_WAKEUP_INTERVAL=512
 
 CFLAGS += -DTOSH_DATA_LENGTH=50
-CFLAGS += -DCONTROLLER_NODEID=0
 CFLAGS += -DTIMESYNC_NODEID=1
 CFLAGS += -DHEARTBEAT_INTERVAL=15000
-CFLAGS += -DLED_INTERVAL=5
-CFLAGS += -DSENSING_INTERVAL=20000L
+CFLAGS += -DLED_INTERVAL=4500L
+CFLAGS += -DSENSING_INTERVAL=2000L
 
-CFLAGS += -DBAT_HIGH=2.7
-CFLAGS += -DBAT_MID=2.5
+CFLAGS += -DBAT_HIGH=3.6
+CFLAGS += -DBAT_MID=3.3
 CFLAGS += -DBAT_MID_INTERVAL=5000
-CFLAGS += -DBAT_LOW=2.0
+CFLAGS += -DBAT_LOW=3.0
 CFLAGS += -DBAT_LOW_INTERVAL=1000
-
-#==== Sliding Window Protocol ===
-CFLAGS += -DWINDOWSIZE=10
-CFLAGS += -DTIMEOUT=200
-#================================
 
 # ==== DEBUG PARAMETERS ====== 
 #CFLAGS += -DDIAGMSG_SERIAL_START
@@ -66,4 +62,5 @@ CFLAGS += -DMOTE_DEBUG_MESSAGES
 #CFLAGS += -DMOTE_DEBUG_QUEUE
 CFLAGS += -DMOTE_DEBUG_MOTECOUNTING
 # ============================
+
 include $(MAKERULES)

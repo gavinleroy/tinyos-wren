@@ -1,0 +1,5 @@
+<volume_table>
+  <volume name="LOGTEST" size="2093056"/>
+  <volume name="CONFIGTEST" size="4096"/>
+</volume_table>
+
