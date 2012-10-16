@@ -58,9 +58,14 @@ implementation {
   components new TimerMilliC() as StatusRandomTimer;
   components new TimerMilliC() as BatteryTimer;
   components new TimerMilliC() as DownloadTimer;
-  components new TimerMilliC() as WRENRandomTimer;
+  components new TimerMilliC() as WRENStatusTimer;
   components new TimerMilliC() as WRENConnectionTimer;
   components new TimerMilliC() as WRENTimeoutTimer;
+  components new TimerMilliC() as AckTimer;
+  components new TimerMilliC() as TransmitTimer;
+  components new TimerMilliC() as ReTransmitTimer;
+
+  
 
   components SerialActiveMessageC as SAM;
   
@@ -97,7 +102,7 @@ implementation {
   App.ConnectionReceive       -> RF233TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
   App.ConnectionSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
 
-  App.SWPAckReceive       -> RF233TimeSyncMessageC.Receive[AM_SWP_MSG];
+  App.AckReceive       -> RF233TimeSyncMessageC.Receive[AM_SWP_MSG];
 
   App.AMSend           -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialStatusSend -> SAM.AMSend[AM_SERIAL_STATUS_MSG];
@@ -118,9 +123,12 @@ implementation {
   App.StatusRandomTimer    -> StatusRandomTimer;
   App.BatteryTimer   -> BatteryTimer;
   App.DownloadTimer  -> DownloadTimer;
-  App.WRENRandomTimer -> WRENRandomTimer;
+  App.WRENStatusTimer -> WRENStatusTimer;
   App.WRENConnectionTimer -> WRENConnectionTimer;
   App.WRENTimeoutTimer -> WRENTimeoutTimer;
+  App.AckTimer -> AckTimer;
+  App.TransmitTimer -> TransmitTimer;
+  App.ReTransmitTimer -> ReTransmitTimer;
   
   components RandomC;
   App.Random -> RandomC;
@@ -162,4 +170,8 @@ implementation {
   
   components BlinkC;
   App.Blink -> BlinkC;
+  
+  //components new VirtualizeTimerC(TMilli, WINDOWSIZE) as VirtualizeTimer;
+  //App.VirtualizeTimer -> VirtualizeTimer;
+
 }

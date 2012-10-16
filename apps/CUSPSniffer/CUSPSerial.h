@@ -21,7 +21,7 @@ typedef nx_struct cmd_serial_msg {
 typedef nx_struct rssi_serial_msg {
     nx_uint16_t counter;
     nx_uint16_t dst;
-    nx_int8_t rssi;
+    nx_uint8_t rssi;
     nx_uint16_t src;
     nx_uint32_t srclocaltime;
     nx_uint32_t srcglobaltime;
@@ -53,18 +53,20 @@ typedef nx_struct wren_status_msg {
     nx_uint32_t buffersize;
 } wren_status_msg_t;
 
-typedef nx_struct wren_handshake_msg {
+typedef nx_struct wren_connection_msg {
     nx_uint16_t src;
     nx_uint16_t dst;
     nx_uint16_t cmd;
     nx_uint32_t logsize;
     nx_uint8_t channel;
     nx_uint8_t isAcked;
-} wren_handshake_msg_t;
+} wren_connection_msg_t;
 
-typedef nx_struct wren_swp_msg {
-    nx_uint32_t seqNumToAck;
-} wren_swp_msg_t;
+typedef nx_struct wren_ack_msg {
+    nx_uint32_t ackNumber;
+    nx_uint8_t index;
+    nx_uint8_t waitForAck;
+} wren_ack_msg_t;
 
 typedef nx_struct base_status_msg {
     nx_uint16_t src;
@@ -102,5 +104,20 @@ enum {
     CMD_CHANNEL_RESET   = 11,
     CMD_WREN_STATUS     = 12,
 };
+
+enum {
+    ENTRY_EMPTY = 0,
+    ENTRY_UART = 1,
+    ENTRY_RADIO = 2,
+};
+
+typedef struct FrameItem
+{
+    uint8_t     state;
+    uint32_t    frameno;
+    uint32_t    timeout;
+    uint32_t    index;
+} FrameItem;
+
 
 #endif

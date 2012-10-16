@@ -293,39 +293,35 @@ implementation {
         uint32_t time;
         rssi_msg_t* rm = (rssi_msg_t*)call Packet.getPayload(&rssipacket, sizeof(rssi_msg_t));
 
-        if(!sensing) {
-            call SensingTimer.stop();
-        } else {
-            if(!rssilocked) {
+        if(!rssilocked) {
 
-                call Leds.led2Toggle();
+            call Leds.led2Toggle();
 
-                call LedOffTimer.startOneShot(LED_INTERVAL);
+            call LedOffTimer.startOneShot(LED_INTERVAL);
 
-                if (rm == NULL) {
-                    return;
-                }
+            if (rm == NULL) {
+                return;
+            }
 
-                rm->counter = counter++;
-                rm->src = TOS_NODE_ID;
-                time  = call GlobalTime.getLocalTime();
-                rm->localtime = time;
-                if(call GlobalTime.local2Global(&time) != SUCCESS) {
-                    // not synced... set global time to 0
-                    //time = 0;
-                    // we ignore this for now. the local storage will show is
-                    // this node is synced or not.
-                }
-                rm->globaltime = time;
-                // we do this in heartbeat now
-                //conf.globaltime = time;
-                //call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
+            rm->counter = counter++;
+            rm->src = TOS_NODE_ID;
+            time  = call GlobalTime.getLocalTime();
+            rm->localtime = time;
+            if(call GlobalTime.local2Global(&time) != SUCCESS) {
+                // not synced... set global time to 0
+                //time = 0;
+                // we ignore this for now. the local storage will show is
+                // this node is synced or not.
+            }
+            rm->globaltime = time;
+            // we do this in heartbeat now
+            //conf.globaltime = time;
+            //call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
 
-                call LowPowerListening.setRemoteWakeupInterval(&rssipacket, REMOTE_WAKEUP_INTERVAL);
+            call LowPowerListening.setRemoteWakeupInterval(&rssipacket, REMOTE_WAKEUP_INTERVAL);
 
-                if (call RssiSend.send(AM_BROADCAST_ADDR, &rssipacket, sizeof(rssi_msg_t), rm->localtime) == SUCCESS) {
-                    rssilocked = TRUE;
-                }
+            if (call RssiSend.send(AM_BROADCAST_ADDR, &rssipacket, sizeof(rssi_msg_t), rm->localtime) == SUCCESS) {
+                rssilocked = TRUE;
             }
         }
     }

@@ -54,7 +54,7 @@ module CUSPBaseRecorderP {
         interface TimeSyncAMSend<TMilli,uint32_t> as ConnectionSend;
         interface Receive as ConnectionReceive; // cmd receive
 
-        interface TimeSyncAMSend<TMilli,uint32_t> as SWPAckSend;
+        interface TimeSyncAMSend<TMilli,uint32_t> as AckSend;
 
         interface Receive as BaseCMDReceive; // base receive
         interface TimeSyncAMSend<TMilli,uint32_t> as BaseStatusSend;
@@ -67,6 +67,7 @@ module CUSPBaseRecorderP {
 
         interface Timer<TMilli> as Timer0;
         interface Timer<TMilli> as RandomTimer2;
+        interface Timer<TMilli> as AckTimer;
         interface Random;
 
         interface LowPowerListening;
@@ -89,10 +90,10 @@ implementation {
         INTER_PACKET_INTERVAL = 25
     };
 
-		enum {
-		  WINDOW_BUFFER_LEN = WINDOWSIZE,
-		  RADIO_QUEUE_LEN = 12,
-		};
+        enum {
+          UART_QUEUE_LEN = WINDOWSIZE,
+          RADIO_QUEUE_LEN = 12,
+        };
       
     typedef nx_struct logentry_t {
         nx_uint8_t len;
@@ -106,15 +107,15 @@ implementation {
 
     uint8_t channel = DEF;
 
-	  message_t  uartQueueBufs[WINDOW_BUFFER_LEN];
-	  message_t  * ONE_NOK uartQueue[WINDOW_BUFFER_LEN];
-	  uint8_t    uartIn, uartOut;
-	  bool       uartBusy, uartFull;
-	
-	  message_t  radioQueueBufs[RADIO_QUEUE_LEN];
-	  message_t  * ONE_NOK radioQueue[RADIO_QUEUE_LEN];
-	  uint8_t    radioIn, radioOut;
-	  bool       radioBusy, radioFull;
+      message_t  uartQueueBufs[UART_QUEUE_LEN];
+      message_t  * ONE_NOK uartQueue[UART_QUEUE_LEN];
+      uint8_t    uartIn, uartOut;
+      bool       uartBusy, uartFull;
+    
+      message_t  radioQueueBufs[RADIO_QUEUE_LEN];
+      message_t  * ONE_NOK radioQueue[RADIO_QUEUE_LEN];
+      uint8_t    radioIn, radioOut;
+      bool       radioBusy, radioFull;
 
     bool m_busy = TRUE;
     logentry_t m_entry;
@@ -132,34 +133,43 @@ implementation {
     bool amsendlocked = FALSE;
     bool basestatuslocked = FALSE;
     bool connectionlocked = FALSE;
-    bool swplocked = FALSE;
+    bool acklocked = FALSE;
 
     uint16_t currentCMD;
     uint8_t currentChannel;
     uint16_t currentDST;
-	uint32_t currentClientLogSize;
+    uint32_t currentClientLogSize;
 
     uint8_t swLowIndex;
     uint8_t swUpperIndex;
-    uint32_t largestFrameUarted;
+    uint32_t lastFrameUarted;
+    
     uint32_t largestFrameReceived;
+    uint8_t largestFrameReceivedIndex;
+    
     uint32_t largestAcceptableFrame;
-
-    FrameItem frameTable[WINDOW_BUFFER_LEN];
+    uint8_t largestAcceptableFrameIndex;
+    
+    uint16_t ackDst;
+    uint8_t lastUARTIndex;
+    uint8_t waitForAck;
+    uint8_t recordCount;
+    
+    FrameItem frameTable[UART_QUEUE_LEN];
 
     task void changeChannelTask();
     task void uartSendTask();
     void sendStatusToBase();
     void sendCommand();
     void sendConnection(wren_connection_msg_t* rkcm);
-    void sendSWPAck(uint16_t dst, uint32_t frameno);
+    task void sendAck();
     uint8_t getFrameNo(uint32_t logsize);
     uint32_t getLastFrameReceived(uint32_t frameno);
 
     void clearFrameTable()
     {
         int8_t i;
-        for(i = 0; i < WINDOW_BUFFER_LEN; ++i) {
+        for(i = 0; i < UART_QUEUE_LEN; ++i) {
             frameTable[i].state = ENTRY_EMPTY;
             frameTable[i].frameno = 0;
             frameTable[i].timeout = 0;
@@ -167,46 +177,48 @@ implementation {
     }
 
     void dropBlink() {
-	   call Leds.led2Toggle();
-	}
-	
-	void failBlink() {
-	   call Leds.led2Toggle();
-	}
+       call Leds.led2Toggle();
+    }
+    
+    void failBlink() {
+       call Leds.led2Toggle();
+    }
     
     event void Boot.booted() {
-	    uint8_t i;
-	
-	    for (i = 0; i < WINDOW_BUFFER_LEN; i++)
-	      uartQueue[i] = &uartQueueBufs[i];
-	    uartIn = uartOut = 0;
-	    uartBusy = FALSE;
-	    uartFull = TRUE;
-	
-	    for (i = 0; i < RADIO_QUEUE_LEN; i++)
-	      radioQueue[i] = &radioQueueBufs[i];
-	    radioIn = radioOut = 0;
-	    radioBusy = FALSE;
-	    radioFull = TRUE;
+        uint8_t i;
+    
+        for (i = 0; i < UART_QUEUE_LEN; i++)
+          uartQueue[i] = &uartQueueBufs[i];
+        uartIn = uartOut = 0;
+        uartBusy = FALSE;
+        uartFull = TRUE;
+    
+        for (i = 0; i < RADIO_QUEUE_LEN; i++)
+          radioQueue[i] = &radioQueueBufs[i];
+        radioIn = radioOut = 0;
+        radioBusy = FALSE;
+        radioFull = TRUE;
 
-	    if (call RadioControl.start() == EALREADY)
-	      radioFull = FALSE;
-	    if (call SerialControl.start() == EALREADY)
-	      uartFull = FALSE;
+        if (call RadioControl.start() == EALREADY)
+          radioFull = FALSE;
+        if (call SerialControl.start() == EALREADY)
+          uartFull = FALSE;
     
         currentCMD = CMD_NONE;
         currentChannel = CC2420_DEF_CHANNEL;
-    	currentClientLogSize = 0;
-    	
-    	swLowIndex = swUpperIndex = 0;
-    	largestFrameReceived = 0;
-    	largestFrameUarted = 0;
-    	largestAcceptableFrame = 0;
+        currentClientLogSize = 0;
+        
+        swLowIndex = swUpperIndex = 0;
+        largestFrameReceived = 0;
+        lastFrameUarted = 0;
+        largestAcceptableFrame = 0;
+        waitForAck = 0;
+        recordCount = 0;
     }
 
     event void RadioControl.startDone(error_t err) {
         if (err == SUCCESS) {
-			      radioFull = FALSE;
+                  radioFull = FALSE;
             m_busy = FALSE;
             // Set the local wakeup interval
             call LowPowerListening.setLocalWakeupInterval(LOCAL_WAKEUP_INTERVAL);
@@ -224,8 +236,8 @@ implementation {
 
     event void SerialControl.startDone(error_t err) {
         if (err == SUCCESS) {
-			     uartFull = FALSE;
-			  }
+                 uartFull = FALSE;
+              }
         else {
             call SerialControl.start();
         }
@@ -234,88 +246,128 @@ implementation {
     event void SerialControl.stopDone(error_t err) {
     }
 
+    event void AckTimer.fired() {
+        post sendAck();
+    }
+
+    uint8_t getIndexFromFrameReceived(uint32_t frameno) {
+        uint8_t i;
+        uint8_t index;
+         
+        i = (largestFrameReceived - frameno);
+        index = (largestAcceptableFrameIndex + i) % UART_QUEUE_LEN;           
+                       
+        return index;
+    }
+
+    uint32_t findFrameIndex(uint32_t frameno) {
+        uint8_t i;
+        for (i = 0; i < UART_QUEUE_LEN; i++) {
+          if (frameTable[i].frameno == frameno) {
+            break;
+          }
+        }       
+        
+        return i;
+    }
+
+    void calculateLargestFrameReceived(uint32_t frameno, uint8_t idx) {
+        uint8_t i;
+        uint8_t index;
+        for (i = largestFrameReceivedIndex; i < (largestFrameReceivedIndex + (UART_QUEUE_LEN - 1)); i++) {
+          index = i % UART_QUEUE_LEN;
+          if (frameTable[index].state == ENTRY_RADIO) {
+	          largestFrameReceived = frameTable[index].frameno;
+	          largestFrameReceivedIndex = index;
+          }
+          else {
+              break;
+          }
+        }  
+        
+        largestAcceptableFrame = largestFrameReceived - (WINDOWSIZE - 1);
+        largestAcceptableFrameIndex = largestFrameReceivedIndex + (WINDOWSIZE - 1);
+             
+    }
 
      event message_t * RssiLogReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
-	    message_t *ret = msg;
+        message_t *ret = msg;
         rssi_serial_msg_t* rssim = (rssi_serial_msg_t*)payload;
-	
-	    #ifdef MOTE_DEBUG_MESSAGES
-	    
-	        if (call DiagMsg.record())
-	        {
-	            call DiagMsg.str("rlr:1");
+
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("rlr:1");
                 call DiagMsg.uint16(rssim->dst);
                 call DiagMsg.uint32(rssim->size);
-                call DiagMsg.uint32(largestFrameReceived);
                 call DiagMsg.uint32(largestAcceptableFrame);
-	            call DiagMsg.send();
-	        }
-	    #endif
-	    
-        // Filtering
-        if (rssim->size > largestFrameReceived || rssim->size < largestAcceptableFrame)
-        {
-            // Discard: Don't send ACK
-            return ret;            
-        }           
-	    
+                call DiagMsg.send();
+            }
+        #endif
+        if (len == sizeof(rssi_serial_msg_t)) {
+            recordCount++;
+            if (recordCount == 1) {
+                largestFrameReceived = rssim->size;
+                largestFrameReceivedIndex = uartIn;
+                largestAcceptableFrame = largestFrameReceived - (WINDOWSIZE - 1);
+                largestAcceptableFrameIndex = largestFrameReceivedIndex + (WINDOWSIZE - 1);
+            }
+            
+	        // Filtering
+	        if (rssim->size > largestFrameReceived || rssim->size < largestAcceptableFrame)
+	        {
+	            
+                ackDst = rssim->dst;
+	            post sendAck();
+	            // Discard: Don't send ACK
+	            return ret;            
+	        }           
+            
+            
         #ifdef MOTE_DEBUG_MESSAGES
         
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rlr:2");
-                call DiagMsg.uint32(largestFrameReceived);
                 call DiagMsg.uint32(largestAcceptableFrame);
-                call DiagMsg.send();
-            }
-        #endif
-        
-
-		uartIn = getFrameNo(rssim->size);
-
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("rlr:4");
                 call DiagMsg.uint8(uartIn);
                 call DiagMsg.send();
             }
         #endif
-		
-	    atomic {
-	      ret = uartQueue[uartIn];
-	      uartQueue[uartIn] = msg;
-		  
-			frameTable[uartIn].state = ENTRY_EMPTY;
-			frameTable[uartIn].frameno = rssim->size;
-			frameTable[uartIn].timeout = 0;
-		  
-		  uartOut = uartIn;
 
-	      uartIn = (uartIn + 1) % WINDOW_BUFFER_LEN;
-	    
-	    }
+            atomic {
+              uartIn = getIndexFromFrameReceived(rssim->size);
 
-        largestFrameReceived = getLastFrameReceived(rssim->size);
-        largestAcceptableFrame = largestFrameReceived - WINDOWSIZE;
+              ret = uartQueue[uartIn];
+              uartQueue[uartIn] = msg;
+                
+	          frameTable[uartIn].state = ENTRY_RADIO;
+	          frameTable[uartIn].frameno = rssim->size;
+	          frameTable[uartIn].timeout = 0;
+              frameTable[uartIn].index = uartIn;
 
-	      // need to see if we can uart data
-	      if (largestFrameReceived < largestFrameUarted)
-	        post uartSendTask();
+              calculateLargestFrameReceived(rssim->size, uartIn);
+              
+              uartOut = uartIn;
+            
+              post uartSendTask();
 
-        // accept rssi packet
-        // send ACK with SeqNumToAck
-        sendSWPAck(rssim->dst, rssim->size);
-	    
-	    return ret;
-	  }
+              ackDst = rssim->dst;
+              post sendAck();
+
+              uartIn = (uartIn + 1) % UART_QUEUE_LEN;
+
+            }
+        }
+        return ret;
+      }
 
     uint8_t getFrameNo(uint32_t logsize) {
         uint8_t frameidx;
-        frameidx = (currentClientLogSize - logsize) % WINDOW_BUFFER_LEN;
+        frameidx = (currentClientLogSize - logsize) % UART_QUEUE_LEN;
         #ifdef MOTE_DEBUG_MESSAGES
         
             if (call DiagMsg.record())
@@ -331,10 +383,10 @@ implementation {
     uint32_t getLastFrameReceived(uint32_t frameno) {
         uint8_t i;
         uint8_t index;
-        uint32_t largestFrame = frameno;
+        uint32_t ackno = frameno;
         uint8_t lastindex = getFrameNo(largestFrameReceived);
-        for (i = lastindex; i < (lastindex + WINDOW_BUFFER_LEN); i++) {
-            index = i % WINDOW_BUFFER_LEN;
+        for (i = lastindex; i < (lastindex + UART_QUEUE_LEN); i++) {
+            index = i % UART_QUEUE_LEN;
 
         #ifdef MOTE_DEBUG_MESSAGES
         
@@ -348,90 +400,92 @@ implementation {
         #endif
 
               if (frameTable[index].frameno == 0) {
-                return largestFrame;
+                return ackno;
               } else {
                 // no not here
-                largestFrame = frameTable[index].frameno;
+                ackno = frameTable[index].frameno;
               }
         }       
     }
 
-	  task void uartSendTask() {
-	    uint8_t len;
-	    //uint8_t tmpLen;
-	    //am_id_t id;
-	    am_addr_t addr, src;
-	    message_t* msg;
-	    am_group_t grp;
+      task void uartSendTask() {
+        uint8_t len;
+        am_id_t id;
+        am_addr_t addr, src;
+        message_t* msg;
+        am_group_t grp;
+        uint8_t tmpLen;
+        
+        msg = uartQueue[uartOut];
+        tmpLen = len = call RadioPacket.payloadLength(msg);
+        id = call RadioAMPacket.type(msg);
+        addr = call RadioAMPacket.destination(msg);
+        src = call RadioAMPacket.source(msg);
+        grp = call RadioAMPacket.group(msg);
+        call UartPacket.clear(msg);
+        call UartAMPacket.setSource(msg, src);
+        call UartAMPacket.setGroup(msg, grp);
 
-	    msg = uartQueue[uartOut];
-        len = call RadioPacket.payloadLength(msg);
-	    //tmpLen = len = call RadioPacket.payloadLength(msg);
-	    //id = call RadioAMPacket.type(msg);
-	    addr = call RadioAMPacket.destination(msg);
-	    src = call RadioAMPacket.source(msg);
-	    grp = call RadioAMPacket.group(msg);
-	    call UartPacket.clear(msg);
-	    call UartAMPacket.setSource(msg, src);
-	    call UartAMPacket.setGroup(msg, grp);
+        frameTable[uartOut].state = ENTRY_UART;
+    
+        if (call UartSend.send(addr, uartQueue[uartOut], len) == SUCCESS)
+          call Leds.led1Toggle();
+        else
+          {
+        failBlink();
+        post uartSendTask();
 
-	    if (call UartSend.send(addr, uartQueue[uartOut], len) == SUCCESS) {
-	    	call Leds.led1Toggle();
-		}
-	    else
-	      {
-	    failBlink();
-	    post uartSendTask();
-	      }
-	  }
-
+      }
+    }
+    
     event void UartSend.sendDone(message_t* msg, error_t error) {
-	    if (error != SUCCESS) {
-		    failBlink();
-		    post uartSendTask();
-	    }
-	    else
-	      atomic
-	    if (msg == uartQueue[uartOut])
-	      {
-			if (frameTable[uartOut].frameno > 0 && largestFrameUarted > frameTable[uartOut].frameno) {
-				largestFrameUarted = frameTable[uartOut].frameno;
-				frameTable[uartOut].frameno = 0; // blank out now since the data is serialized
-			}
-	      }
+        if (error != SUCCESS) {
+          failBlink();
+          post uartSendTask();
+        }
+        else
+          atomic
+        if (msg == uartQueue[uartOut])
+          {
+ 	        frameTable[uartOut].state = ENTRY_EMPTY;
+            frameTable[uartOut].frameno = 0;
+            frameTable[uartOut].timeout = 0;
+            frameTable[uartOut].index = 0;
+          }
     }
 
-    void sendSWPAck(uint16_t dst, uint32_t frameno)
+    task void sendAck()
     {
         uint32_t time;
-        wren_swp_msg_t* sm;
-        if(!swplocked) {
-	        time  = call GlobalTime.getLocalTime();
-	        sm = (wren_swp_msg_t*)call RadioPacket.getPayload(&swppacket, sizeof(wren_swp_msg_t));
-	
-	        #ifdef MOTE_DEBUG_MESSAGES
-	            if (call DiagMsg.record())
-	            {
-	                call DiagMsg.str("ack:1");
-	                call DiagMsg.send();
-	            }
-	        #endif
+        wren_ack_msg_t* sm;
+        if(!acklocked) {
+            time  = call GlobalTime.getLocalTime();
+            sm = (wren_ack_msg_t*)call RadioPacket.getPayload(&swppacket, sizeof(wren_ack_msg_t));
+    
+            #ifdef MOTE_DEBUG_MESSAGES
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("ack:1");
+                    call DiagMsg.send();
+                }
+            #endif
 
 
             if (sm == NULL) {
                 return;
             }
             
-            // Send cumulative ACKs
-						            
-            sm->seqNumToAck = frameno; 
-
+            sm->ackNumber = largestFrameReceived; 
+            sm->index = largestFrameReceivedIndex;
+            sm->waitForAck = waitForAck;
+            
         #ifdef MOTE_DEBUG_MESSAGES
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("ack:2");
-                call DiagMsg.uint16(dst);
-                call DiagMsg.uint32(sm-> seqNumToAck);
+                call DiagMsg.uint16(ackDst);
+                call DiagMsg.uint32(sm-> ackNumber);
+                call DiagMsg.uint8(sm->index);
                 call DiagMsg.send();
             }
         #endif
@@ -443,13 +497,13 @@ implementation {
             call LowPowerListening.setRemoteWakeupInterval(&swppacket, REMOTE_WAKEUP_INTERVAL);
     
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-            if (call SWPAckSend.send(dst, &swppacket, sizeof(wren_swp_msg_t), time) == SUCCESS) {
-                swplocked = TRUE;
+            if (call AckSend.send(ackDst, &swppacket, sizeof(wren_ack_msg_t), time) == SUCCESS) {
+                acklocked = TRUE;
             }
         }
     }
 
-    event void SWPAckSend.sendDone(message_t* msg, error_t err) {
+    event void AckSend.sendDone(message_t* msg, error_t err) {
         #ifdef MOTE_DEBUG_MESSAGES
         
             if (call DiagMsg.record())
@@ -458,10 +512,15 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
-        swplocked = FALSE;
+        acklocked = FALSE;
+
+      // need to see if we can uart data
+      if (largestFrameReceived < lastFrameUarted) {
+        uartOut = lastUARTIndex + 1;
+        post uartSendTask();
+      }
     }
 
-	  uint8_t tmpLen;
 
     event void SerialBaseStatusSend.sendDone(message_t* msg, error_t err) {
         basestatuslocked = FALSE;
@@ -506,7 +565,7 @@ implementation {
                 basestatuslocked = TRUE;
             }
             else {
-	            call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, 0);
+                call LowPowerListening.setRemoteWakeupInterval(&basestatuspacket, 0);
                 if (call BaseStatusSend.send(AM_BROADCAST_ADDR, &basestatuspacket, sizeof(base_status_msg_t), time) == SUCCESS) {
                     basestatuslocked = TRUE;
                 }
@@ -647,21 +706,21 @@ implementation {
                                 void *payload,
                                 uint8_t len) {
 
-	    if (call RadioAMPacket.isForMe(msg)) {
-	        if (len != sizeof(cmd_serial_msg_t)) {
-	            call Leds.led0Toggle();
-	            return msg;
-	        }
-	        else {
-	            cmd_serial_msg_t* rkcm = (cmd_serial_msg_t*)call RadioPacket.getPayload(&cmdpacket, sizeof(rssi_msg_t));
+        if (call RadioAMPacket.isForMe(msg)) {
+            if (len != sizeof(cmd_serial_msg_t)) {
+                call Leds.led0Toggle();
+                return msg;
+            }
+            else {
+                cmd_serial_msg_t* rkcm = (cmd_serial_msg_t*)call RadioPacket.getPayload(&cmdpacket, sizeof(rssi_msg_t));
                 cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)payload;
 
-	            rkcm->cmd   = rcm->cmd;
-	            rkcm->dst   = rcm->dst;
-	            rkcm->channel = rcm->channel;
-	            
-	            currentCMD = rcm->cmd;
-	            currentChannel = rcm->channel;
+                rkcm->cmd   = rcm->cmd;
+                rkcm->dst   = rcm->dst;
+                rkcm->channel = rcm->channel;
+                
+                currentCMD = rcm->cmd;
+                currentChannel = rcm->channel;
                 currentDST     = rcm->dst;
                 
                 if (currentCMD == CMD_CHANNEL) { 
@@ -671,16 +730,16 @@ implementation {
                     sendCommand();
                 } 
                 /*
-	            if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL) { 
+                if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL) { 
                     post changeChannelTask();
                 }
                 else {
                     sendCommand();
                 } 
                 */
-	        }
-	    }
-	    return msg;
+            }
+        }
+        return msg;
     }
 
      event message_t * ConnectionReceive.receive(message_t *msg,
@@ -701,10 +760,17 @@ implementation {
                 rkcm->dst   = rcm->dst;
                 rkcm->logsize = rcm->logsize;
                 
-                currentClientLogSize = rkcm->logsize;
-                largestFrameReceived = rkcm->logsize;
-                largestAcceptableFrame = largestFrameReceived - WINDOWSIZE;
                 
+                currentClientLogSize = rkcm->logsize;
+                //largestFrameReceived = rkcm->logsize;
+                
+                recordCount = 0;
+                
+//                if (rkcm->logsize > 0)
+//                    largestAcceptableFrame = rkcm->logsize - 1;
+//                else
+//                    largestAcceptableFrame = rkcm->logsize;
+                    
                 rkcm->channel = rcm->channel;
 
                 #ifdef MOTE_DEBUG_MESSAGES
@@ -712,7 +778,7 @@ implementation {
                     if (call DiagMsg.record())
                     {
                         call DiagMsg.str("crr:0");
-		                call DiagMsg.uint16(rkcm->src);
+                        call DiagMsg.uint16(rkcm->src);
                         call DiagMsg.send();
                     }
                 #endif
@@ -790,8 +856,8 @@ implementation {
             return msg;
         }
         else {
-	        if(!statuslocked) {
-	        }
+            if(!statuslocked) {
+            }
             
         }
         return msg;
@@ -840,5 +906,5 @@ implementation {
         
         }
         return msg;
-    }	  
+    }      
 }

@@ -24,8 +24,7 @@ import RssiSerialMsg
 import SerialStatusMsg
 import BaseStatusMsg
 import WRENStatusMsg
-import WRENConnectionMsg
-import PrintMsg
+import WRENHandShakeMsg
 
 CMD_DOWNLOAD        = 0
 CMD_ERASE           = 1
@@ -63,19 +62,17 @@ class CmdCenter:
     progressLock = threading.RLock()
     
     f = {}
-    sensors = []
-    deployingsensors = []
-    
+    motes = []
 #    downloadingMotes = []
     
     basemsgs = {}
     wrenmsgs = {}
-    wrenconnectionmsgs = {}
+    wrenhandshakemsgs = {}
     downloaders = {}
     
     moteLogSize = {}
     downloadTrials = defaultdict(int)
-    printMgr = PrintMsg.PrintMsg()
+    
     
     def __init__(self):
         print "init"
@@ -86,10 +83,10 @@ class CmdCenter:
         self.m = mni.MNI()
         self.basemsgTimer = ResettableTimer(2, self.printBaseStatus)
         self.msgTimer = ResettableTimer(3, self.printStatus)
-        self.downloadTimer = ResettableTimer(3, self.download_Sensors)
+        self.downloadTimer = ResettableTimer(3, self.download_Start)
 #        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
-        self.wrenConnectionTimer = ResettableTimer(2, self.printConnection)
+        self.wrenHandShakeTimer = ResettableTimer(2, self.printHandShake)
         self.progressTimer = ResettableTimer(10, self.checkProgress, 1)
 
         # connecting serial forwarder for all nodes
@@ -97,7 +94,7 @@ class CmdCenter:
         for n in self.m.get_nodes():
             sys.stdout.write("%d,%s "%(n.id, n.serial))
             numberOfMotes = numberOfMotes + 1
-        sys.stdout.write("\n number of sensors connected: %d\n" %(numberOfMotes))
+        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
         sys.stdout.flush()
 
         # starting mote interfaces
@@ -128,7 +125,7 @@ class CmdCenter:
             self.mif[n.id].addListener(self, SerialStatusMsg.SerialStatusMsg)
             self.mif[n.id].addListener(self, BaseStatusMsg.BaseStatusMsg)
             self.mif[n.id].addListener(self, WRENStatusMsg.WRENStatusMsg)
-            self.mif[n.id].addListener(self, WRENConnectionMsg.WRENConnectionMsg)
+            self.mif[n.id].addListener(self, WRENHandShakeMsg.WRENHandShakeMsg)
 
 
     def receive(self, src, msg):
@@ -191,35 +188,40 @@ class CmdCenter:
                 f = open(basedir+"/timesync.log", "a+")
                 f.write("%.3f, %d\n"%(time.time(), m.get_globaltime()))
                 f.close()
+            
+            # collect all client motes out there
+            # print("exist", m.get_src(), self.motes.count(m.get_src()))
+            #if self.motes.count(m.get_src()) == 0:
+            #    self.motes.append(m.get_src())
 
         if msg.get_amType() == WRENStatusMsg.AM_TYPE:
             with self.lock:
-#                if not self.wrenTimer.isAlive():
-#                    self.wrenTimer.start()
-#                self.wrenTimer.reset()
+                if not self.wrenTimer.isAlive():
+                    self.wrenTimer.start()
+                self.wrenTimer.reset()
 
                 m = WRENStatusMsg.WRENStatusMsg(msg.dataGet())
                 self.wrenmsgs[m.get_src()] = m
 
             # collect all client motes out there
             # print("exist", m.get_src(), self.motes.count(m.get_src()))
-            if self.deployingsensors.count(m.get_src()) == 0:
-                self.deployingsensors.append(m.get_src())
-            
-        if msg.get_amType() == WRENConnectionMsg.AM_TYPE:
+            if self.motes.count(m.get_src()) == 0 and m.get_buffersize() > 0:
+                self.motes.append(m.get_src())
+
+        if msg.get_amType() == WRENHandShakeMsg.AM_TYPE:
             with self.lock:
-                if not self.wrenConnectionTimer.isAlive():
-                    self.wrenConnectionTimer.start()
-                self.wrenConnectionTimer.reset()
+                if not self.wrenHandShakeTimer.isAlive():
+                    self.wrenHandShakeTimer.start()
+                self.wrenHandShakeTimer.reset()
 
-                m = WRENConnectionMsg.WRENConnectionMsg(msg.dataGet())
-                self.wrenconnectionmsgs[m.get_src()] = m
+                m = WRENHandShakeMsg.WRENHandShakeMsg(msg.dataGet())
+                self.wrenhandshakemsgs[m.get_src()] = m
 
-            # collect all client sensors out there
-            # print("exist", m.get_src(), self.sensors.count(m.get_src()))
-            if self.sensors.count(m.get_src()) == 0 and m.get_logsize() > 0:
+            # collect all client motes out there
+            # print("exist", m.get_src(), self.motes.count(m.get_src()))
+            if self.motes.count(m.get_src()) == 0 and m.get_logsize() > 0:
                 self.done_Mote(m.get_src())
-                self.sensors.append(m.get_src())
+                self.motes.append(m.get_src())
                                 
         if msg.get_amType() == BaseStatusMsg.AM_TYPE:
             with self.lock:
@@ -250,7 +252,7 @@ class CmdCenter:
                 restart = True
                 
         if restart == True:
-            self.download_Sensors()
+            self.download_Start()
             
         return True
 
@@ -307,7 +309,7 @@ class CmdCenter:
             else:
                 # mote download started. Now check to see if the mote is still downloading....
                 if self.logSize[nodeid] > 0:
-                    if self.logSize[nodeid] < 10:
+                    if self.logSize[nodeid] < 20:
                         self.downloadTrials[nodeid] += 1
                         if self.downloadTrials[nodeid] > 4: # greater than 3 time trials, give up for the mote
                             self.downloaders[baseid] = 0
@@ -340,31 +342,10 @@ class CmdCenter:
                     self.progressTimer.reset()    
 
 
-    def download_Sensors(self):
-        print "download_Start mapping..."
-        self.printDownloadMapping()
-
-        for baseid, nodeid in self.downloaders.iteritems(): # we can optimize this lookup
-            if nodeid == 0:
-                if len(self.sensors) > 0:
-                    nodeid = self.sensors.pop()
-                    
-                    if nodeid > 0:
-                        if not self.exist_Mote(nodeid):
-                            self.downloaders[baseid] = nodeid
-                            self.downloadTrials[nodeid] = 0
-                            self.moteLogSize[nodeid] = 0
-                            self.monitor_Mote(baseid, nodeid)
-                else:
-                    # reach the end. maybe exit
-                    print "download finished !"
-            else:
-                #self.downloadTrials[nodeid] = 0
-                #self.moteLogSize[nodeid] = 0
-                self.monitor_Mote(baseid, nodeid)
-                    #self.resetDownloadTimer()
-
-        self.downloadTimer.reset()
+    def donwload_Sensors(self, filename):
+        sensors = self.readInputFile(filename)
+        for elem in sensors:
+            print elem
 
     def download_Start(self):
         print "download_Start mapping..."
@@ -372,14 +353,14 @@ class CmdCenter:
 
         for baseid, nodeid in self.downloaders.iteritems(): # we can optimize this lookup
             if nodeid == 0:
-                if len(self.sensors) > 0:
-                    nodeid = self.sensors.pop()
+                if len(self.motes) > 0:
+                    nodeid = self.motes.pop()
                 else:
                     if self.downloadMode == DOWNLOAD_ALL:
                         self.queryWREN()
                         time.sleep(3)
-                        if len(self.sensors) > 0:
-                            nodeid = self.sensors.pop()
+                        if len(self.motes) > 0:
+                            nodeid = self.motes.pop()
                         else:
                             nodeid = -1
                     else:
@@ -409,7 +390,7 @@ class CmdCenter:
     def done_Mote(self, nodeid):
         self.clearDownloading(nodeid)
         time.sleep(1)
-        self.download_Sensors()
+        self.download_Start()
     
     def sendDownloadCmdToController(self, channel, nodeid):
         #self.resetDownloadTimer()
@@ -426,7 +407,7 @@ class CmdCenter:
     #            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             #self.downloadTimer.reset()
-            time.sleep(2)
+            time.sleep(1)
 
 
     def sendDownloadCmdToDownloader(self, baseid, nodeid):
@@ -442,7 +423,7 @@ class CmdCenter:
             #self.resetDownloadTimer()
             #self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             self.mif[baseid].sendMsg(self.tos_source[baseid], baseid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-            time.sleep(2)
+            time.sleep(1)
             #self.mif[baseid].sendMsg(self.tos_source[baseid], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             #self.mif[baseid].sendMsg(self.tos_source[baseid], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             #self.downloadTimer.reset()
@@ -506,6 +487,11 @@ class CmdCenter:
             self.progressTimer.reset()
             #self.downloadTimer.run()
             
+    def split_list(alist, wanted_parts=1):
+        length = len(alist)
+        return [ alist[i*length // wanted_parts: (i+1)*length // wanted_parts] 
+                 for i in range(wanted_parts) ]
+
     def printLogSize(self):
         for key, value in self.logSize.iteritems(): # we can optimize this lookup
             print "logSize:", key, value
@@ -550,26 +536,26 @@ class CmdCenter:
 
         self.wrenmsgs = {}
 
-    def printConnection(self):
-        wrenkeys = self.wrenconnectionmsgs.keys()
+    def printHandShake(self):
+        wrenkeys = self.wrenhandshakemsgs.keys()
         wrenkeys.sort()
         for id in wrenkeys:
-            m = self.wrenconnectionmsgs[id]
+            m = self.wrenhandshakemsgs[id]
             sys.stdout.write("id: %4d, is Acked: %d\n"%(m.get_src(), m.get_isAcked()))
 
-        sys.stdout.write("%d messages received !\n"%(len(self.wrenconnectionmsgs)))
+        sys.stdout.write("%d messages received !\n"%(len(self.wrenhandshakemsgs)))
         sys.stdout.flush()
 
-        self.wrenconnectionmsgs = {}
+        self.wrenhandshakemsgs = {}
 
     def printMoteQueues(self):
-        print "***", len(self.sensors), "client sensors have data and queued for download"
+        print "***", len(self.motes), "client motes have data and queued for download"
         print "***", len(self.downloaders), "download base stations are ready for download"
 
     def printMoteQueueDetail(self):
-        print "***", len(self.sensors), "client sensors have data and queued for download"
+        print "***", len(self.motes), "client motes have data and queued for download"
         print "client node id:"
-        for elem in self.sensors:
+        for elem in self.motes:
             print elem
         
         print "***", len(self.downloaders), "download base stations are ready for download"
@@ -578,7 +564,7 @@ class CmdCenter:
             print elem
 
     def printSensors(self, sensors):
-        print "***", len(sensors), "client sensors have data and queued for download"
+        print "***", len(sensors), "client motes have data and queued for download"
         print "sensors:"
         for elem in sensors:
             print elem
@@ -631,37 +617,21 @@ class CmdCenter:
                 setting.append(line)
         return setting        
 
-    def output(self, filename):
-        f = open(filename, "a+")
-        for elem in self.deployingsensors:
-            f.write(str(elem) + "\n")
+    def output(self, sensors):
+        f = open("download.txt", "a+")
+        for elem in sensors:
+            f.write(str(elem + "\n"))
         f.close()
 
-    def getDeployableSensors(self, howmany):
+    def getSensors(self, sensors, howmany):
+        deployingsensors = []
         i = 0
-        giveup = 0
-        for sensorid in self.sensors:
-            msg = CmdSerialMsg.CmdSerialMsg()
-            msg.set_cmd(CMD_WREN_STATUS)
-            msg.set_dst(102)
-            giveup = 0
-            for n in self.m.get_nodes():
-                if self.deployingsensors.count(sensorid) == 0:
-                    print "pinging ", sensorid
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], sensorid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                    giveup += 1
-                    time.sleep(2)
-                    if giveup > 5:
-                        print "not ready ", sensorid
-                        break;
-                else:
-                    print "Is Ready ", sensorid
+        for elem in sensors:
+            if int(elem)%2 == 0: 
+                if i < howmany:
+                    deployingsensors.append(elem)
                     i += 1
-                    break
-                
-            if i == howmany:
-                break
-           
+        return deployingsensors
 
     def main_loop(self):
 
@@ -676,17 +646,13 @@ class CmdCenter:
                 if filename == 'n':
                     continue
                 elif os.path.exists(filename):
-                    self.sensors = self.readInputFile(filename)
-                    self.printSensors(self.sensors)
-                    
-                    self.getDeployableSensors(10)
+                    sensors = self.readInputFile(filename)
+                    self.printSensors(sensors)
 
-            if c == 'k':
-                if len(self.deployingsensors) > 0:
-                    self.output("download.txt")
+                self.output(self.getSensors(sensors, 10))
 
             if c == 'u':
-                self.donwload_Sensors(self.basedir + "download.txt")
+                self.donwload_Sensors("download.txt")
                 
             if c == 'p':
                 self.printMoteQueueDetail()
@@ -763,16 +729,14 @@ class CmdCenter:
 #                    self.downloadTimer.start()
 #                self.downloadTimer.reset()
 
-                self.stopSensing(0xffff)
-                time.sleep(2) #give sometime to settle down                
                 # start download
-                # stop all sensors first
-                sensors = self.readInputFile(filename)
-
+                # stop all motes first
+                self.queryWREN()
                 self.setDownloadBaseStationChannel()
-                time.sleep(3) #give sometime to settle down                
 
-#                # get the first group of sensors for download and set channels for base stations
+                time.sleep(3) #give sometime to settle down                
+                self.stopSensing(0xffff)
+#                # get the first group of motes for download and set channels for base stations
 #                self.queryWREN()
 #                # set base channels
 #                self.setDownloadBaseStationChannel()
@@ -780,7 +744,7 @@ class CmdCenter:
                 
                 #self.resetDownloadTimer()
                 self.resetProgressTimer()
-                self.download_Sensors()
+                self.download_Start()
             elif c == 'r':
                 # restore log
                 c = raw_input("Are you sure you want to restore log? [y/n]")
@@ -842,7 +806,7 @@ class CmdCenter:
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
 
-                    # get the first group of sensors for download and set channels for base stations
+                    # get the first group of motes for download and set channels for base stations
                     #self.queryWREN()
                     # set base channels
                     self.setDownloadBaseStationChannel()
@@ -851,11 +815,11 @@ class CmdCenter:
                     self.stopSensing(nodeid)
                     time.sleep(3) #give sometime to settle down                
 
-                    if self.sensors.count(nodeid) == 0:
-                        self.sensors.append(nodeid)
+                    if self.motes.count(nodeid) == 0:
+                        self.motes.append(nodeid)
 
                     #self.resetProgressTimer()
-                    self.download_Sensors()
+                    self.download_Start()
                     
 #                    msg = CmdSerialMsg.CmdSerialMsg()
 #                    msg.set_cmd(CMD_DOWNLOAD)

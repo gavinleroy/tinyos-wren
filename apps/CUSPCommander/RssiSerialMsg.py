@@ -194,7 +194,7 @@ class RssiSerialMsg(tinyos.message.Message.Message):
     
     #
     # Accessor methods for field: rssi
-    #   Field type: byte
+    #   Field type: short
     #   Offset (bits): 32
     #   Size (bits): 8
     #
@@ -224,16 +224,16 @@ class RssiSerialMsg(tinyos.message.Message.Message):
         return 32
     
     #
-    # Return the value (as a byte) of the field 'rssi'
+    # Return the value (as a short) of the field 'rssi'
     #
     def get_rssi(self):
-        return self.getSIntElement(self.offsetBits_rssi(), 8, 1)
+        return self.getUIntElement(self.offsetBits_rssi(), 8, 1)
     
     #
     # Set the value of the field 'rssi'
     #
     def set_rssi(self, value):
-        self.setSIntElement(self.offsetBits_rssi(), 8, value, 1)
+        self.setUIntElement(self.offsetBits_rssi(), 8, value, 1)
     
     #
     # Return the size, in bytes, of the field 'rssi'

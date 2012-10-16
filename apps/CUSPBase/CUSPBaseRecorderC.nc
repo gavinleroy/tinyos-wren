@@ -48,6 +48,7 @@ implementation {
   components ActiveMessageC;
   components new TimerMilliC() as Timer0;
   components new TimerMilliC() as RandomTimer2;
+  components new TimerMilliC() as AckTimer;
 
   components SerialActiveMessageC as SAM;
   components CC2420ActiveMessageC;
@@ -79,7 +80,7 @@ implementation {
   App.BaseCMDReceive   -> TimeSyncMessageC.Receive[AM_BASE_MSG];
   App.BaseStatusSend   -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
 
-  App.SWPAckSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_SWP_MSG];
+  App.AckSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_SWP_MSG];
 
   App.UartSend         -> SAM.AMSend[AM_RSSI_SERIAL_MSG];
   App.SerialControl    -> SAM;
@@ -91,6 +92,7 @@ implementation {
 
   App.Timer0         -> Timer0;
   App.RandomTimer2   -> RandomTimer2;
+  App.AckTimer   -> AckTimer;
 
   components RandomC;
   App.Random -> RandomC;
