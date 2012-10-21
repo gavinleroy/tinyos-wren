@@ -63,9 +63,8 @@ typedef nx_struct wren_connection_msg {
 } wren_connection_msg_t;
 
 typedef nx_struct wren_ack_msg {
+    nx_uint32_t seqno;
     nx_uint32_t ackNumber;
-    nx_uint8_t index;
-    nx_uint8_t waitForAck;
 } wren_ack_msg_t;
 
 typedef nx_struct base_status_msg {
@@ -109,6 +108,7 @@ enum {
     ENTRY_EMPTY = 0,
     ENTRY_UART = 1,
     ENTRY_RADIO = 2,
+    ENTRY_ACK = 3,
 };
 
 typedef struct FrameItem
@@ -116,7 +116,8 @@ typedef struct FrameItem
     uint8_t     state;
     uint32_t    frameno;
     uint32_t    timeout;
-    uint32_t    index;
+    uint8_t    index;
+    uint8_t    attempt;
 } FrameItem;
 
 

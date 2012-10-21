@@ -142,18 +142,21 @@ implementation {
 
     uint8_t swLowIndex;
     uint8_t swUpperIndex;
-    uint32_t lastFrameUarted;
+    uint32_t lastUartedFrameNo;
     
-    uint32_t largestFrameReceived;
-    uint8_t largestFrameReceivedIndex;
+    uint32_t lastReceivedFrameNo;
+    uint8_t lastReceivedFrameIndex;
     
-    uint32_t largestAcceptableFrame;
-    uint8_t largestAcceptableFrameIndex;
+    uint32_t lastAcceptableFrameNo;
+    uint8_t lastAcceptableFrameIndex;
     
     uint16_t ackDst;
-    uint8_t lastUARTIndex;
-    uint8_t waitForAck;
-    uint8_t recordCount;
+    uint32_t ackseqno;
+    
+    uint8_t lastUartedFrameIndex;
+    uint32_t recordCount;
+    
+    uint8_t ackAttempt;
     
     FrameItem frameTable[UART_QUEUE_LEN];
 
@@ -163,16 +166,25 @@ implementation {
     void sendCommand();
     void sendConnection(wren_connection_msg_t* rkcm);
     task void sendAck();
-    uint8_t getFrameNo(uint32_t logsize);
-    uint32_t getLastFrameReceived(uint32_t frameno);
+    
+    uint8_t getIndexFromLastFrameReceived(uint32_t frameno);
+    uint32_t findFrameIndex(uint32_t frameno);
+	uint8_t getIndexNumber(uint32_t input);
+	uint32_t slideDownWindows(uint32_t input);
+	uint32_t slideUpWindows(uint32_t input);
+    void adjustLastReceivedFrame(uint32_t frameno, uint8_t idx);
+    void adjustAcceptableSlidingWindows(uint32_t frameno, uint8_t idx);
 
     void clearFrameTable()
     {
         int8_t i;
         for(i = 0; i < UART_QUEUE_LEN; ++i) {
+            frameTable[i].dst = 0;
             frameTable[i].state = ENTRY_EMPTY;
             frameTable[i].frameno = 0;
             frameTable[i].timeout = 0;
+            frameTable[i].index = 0;
+            frameTable[i].attempt = 0;
         }
     }
 
@@ -209,11 +221,14 @@ implementation {
         currentClientLogSize = 0;
         
         swLowIndex = swUpperIndex = 0;
-        largestFrameReceived = 0;
-        lastFrameUarted = 0;
-        largestAcceptableFrame = 0;
-        waitForAck = 0;
+        lastReceivedFrameNo = 0;
+        lastUartedFrameNo = 0;
+        lastAcceptableFrameNo = 0;
         recordCount = 0;
+        
+        ackseqno = 0;
+        ackAttempt = 0;
+        
     }
 
     event void RadioControl.startDone(error_t err) {
@@ -247,15 +262,21 @@ implementation {
     }
 
     event void AckTimer.fired() {
-        post sendAck();
+        if (ackAttempt <= ACK_ATTEMPT) {
+            post sendAck();
+            ackAttempt++;
+        } else {
+            ackAttempt = 0;
+            call AckTimer.stop();
+        }
     }
 
-    uint8_t getIndexFromFrameReceived(uint32_t frameno) {
+    uint8_t getIndexFromLastFrameReceived(uint32_t frameno) {
         uint8_t i;
         uint8_t index;
          
-        i = (largestFrameReceived - frameno);
-        index = (largestAcceptableFrameIndex + i) % UART_QUEUE_LEN;           
+        i = (lastReceivedFrameNo - frameno);
+        index = getIndexNumber(lastReceivedFrameIndex + i);           
                        
         return index;
     }
@@ -271,142 +292,228 @@ implementation {
         return i;
     }
 
-    void calculateLargestFrameReceived(uint32_t frameno, uint8_t idx) {
+	uint8_t getIndexNumber(uint32_t input) {
+		return input % UART_QUEUE_LEN;
+	}
+	
+	uint32_t slideDownWindows(uint32_t input) {
+		if (input <= UART_QUEUE_LEN) {
+          return 0;
+		} else {
+		  return input - (UART_QUEUE_LEN - 1);
+		}	
+	}
+
+	uint32_t slideUpWindows(uint32_t input) {
+		return input + (UART_QUEUE_LEN - 1);	
+	}
+	
+    void adjustLastReceivedFrame(uint32_t frameno, uint8_t idx) {
         uint8_t i;
         uint8_t index;
-        for (i = largestFrameReceivedIndex; i < (largestFrameReceivedIndex + (UART_QUEUE_LEN - 1)); i++) {
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("adj:0");
+                call DiagMsg.uint8(lastUartedFrameIndex);
+                call DiagMsg.uint8(lastReceivedFrameIndex);
+                call DiagMsg.send();
+            }
+        #endif
+        for (i = lastReceivedFrameIndex; i < slideUpWindows(lastUartedFrameIndex); i++) {
           index = i % UART_QUEUE_LEN;
-          if (frameTable[index].state == ENTRY_RADIO) {
-	          largestFrameReceived = frameTable[index].frameno;
-	          largestFrameReceivedIndex = index;
+	        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("adj:1");
+                    call DiagMsg.uint8(index);
+	                call DiagMsg.uint8(frameTable[index].state);
+                    call DiagMsg.uint32(lastReceivedFrameNo);
+                    call DiagMsg.uint8(lastReceivedFrameIndex);
+	                call DiagMsg.send();
+	            }
+	        #endif
+          if (frameTable[index].state == ENTRY_UART || frameTable[index].state == ENTRY_RADIO) {
+	          lastReceivedFrameNo = frameTable[index].frameno;
+	          lastReceivedFrameIndex = index;
           }
           else {
               break;
           }
         }  
         
-        largestAcceptableFrame = largestFrameReceived - (WINDOWSIZE - 1);
-        largestAcceptableFrameIndex = largestFrameReceivedIndex + (WINDOWSIZE - 1);
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("adj:2");
+                call DiagMsg.uint32(lastReceivedFrameNo);
+                call DiagMsg.uint8(lastReceivedFrameIndex);
+                call DiagMsg.send();
+            }
+        #endif
+        
              
     }
 
+    void adjustAcceptableSlidingWindows(uint32_t frameno, uint8_t idx) {
+        lastAcceptableFrameNo = slideDownWindows(frameno);
+        lastAcceptableFrameIndex = getIndexNumber(slideUpWindows(idx));
+        
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("asw:0");
+                call DiagMsg.uint32(lastAcceptableFrameNo);
+                call DiagMsg.uint8(lastAcceptableFrameIndex);
+                call DiagMsg.send();
+            }
+        #endif
+        
+             
+    }
+
+    void printFrameTable(uint8_t index) {
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("frame:");
+                call DiagMsg.uint16(frameTable[index].dst);
+                call DiagMsg.uint8(frameTable[index].state);
+                call DiagMsg.uint32(frameTable[index].frameno);
+                call DiagMsg.uint32(frameTable[index].index);
+                call DiagMsg.send();
+            }
+        #endif
+        
+    }
+    
      event message_t * RssiLogReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
         message_t *ret = msg;
         rssi_serial_msg_t* rssim = (rssi_serial_msg_t*)payload;
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rlr:1");
                 call DiagMsg.uint16(rssim->dst);
                 call DiagMsg.uint32(rssim->size);
-                call DiagMsg.uint32(largestAcceptableFrame);
+                call DiagMsg.uint32(lastAcceptableFrameNo);
                 call DiagMsg.send();
             }
         #endif
+        
         if (len == sizeof(rssi_serial_msg_t)) {
-            recordCount++;
+            
+            ++recordCount;
+            // We need to set default values when the download starts.
+			// Somehow the connection is established, the numbers delivered don't match our first data arrived here.
             if (recordCount == 1) {
-                largestFrameReceived = rssim->size;
-                largestFrameReceivedIndex = uartIn;
-                largestAcceptableFrame = largestFrameReceived - (WINDOWSIZE - 1);
-                largestAcceptableFrameIndex = largestFrameReceivedIndex + (WINDOWSIZE - 1);
+                
+                // We have size that starts the largest and decrement by one from there, give 1 pad
+                //lastReceivedFrameNo = rssim->size + 1;
+                lastReceivedFrameNo = rssim->size;
+                
+                // decide which buffer index will be the first one to be used
+                lastReceivedFrameIndex = 0;
+                
+                // We need to have a default value for the first uart  
+                lastUartedFrameNo = lastReceivedFrameNo;
+                
+                // set the default index for uart
+                lastUartedFrameIndex = 0;
+
+                // since the number is from the largest to the smallest, we need to do minus
+                lastAcceptableFrameNo = slideDownWindows(lastUartedFrameNo);
+                
+                // But the buffer is incrementing by one on the other hand, confusing...
+                lastAcceptableFrameIndex = getIndexNumber(slideUpWindows(lastUartedFrameIndex));
+                
             }
             
-	        // Filtering
-	        if (rssim->size > largestFrameReceived || rssim->size < largestAcceptableFrame)
+	        // Filtering (if the receiving packet has greater number than or smaller number than we are expecting, discard)
+	        if (rssim->size > lastReceivedFrameNo || rssim->size < lastAcceptableFrameNo)
 	        {
 	            
-                ackDst = rssim->dst;
-	            post sendAck();
+                // ackDst = rssim->dst;
+	            // post sendAck();
 	            // Discard: Don't send ACK
 	            return ret;            
 	        }           
             
-            
-        #ifdef MOTE_DEBUG_MESSAGES
+			// important to run following in the atomic action
+            atomic {
+              //uartIn = rssim->frameindex;
+              
+              // This line should return % Buffer Size index of the size within the limit of the buffer size
+              uartIn = getIndexFromLastFrameReceived(rssim->size);
+
+        #ifdef MOTE_DEBUG_MESSAGE
         
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rlr:2");
-                call DiagMsg.uint32(largestAcceptableFrame);
+                call DiagMsg.uint32(lastUartedFrameNo);
+                call DiagMsg.uint32(lastAcceptableFrameNo);
+                call DiagMsg.uint32(rssim->size);
                 call DiagMsg.uint8(uartIn);
                 call DiagMsg.send();
             }
         #endif
 
-            atomic {
-              uartIn = getIndexFromFrameReceived(rssim->size);
+              // Filter out packets already received 
+              //if (frameTable[uartIn].state == ENTRY_EMPTY) {
+                  // stop now. we got something. 
+                  call AckTimer.stop();
+			      ackAttempt = 0;
+                  
+	              ret = uartQueue[uartIn];
+	              uartQueue[uartIn] = msg;
+	                
+                  frameTable[uartIn].dst = rssim->dst;
+		          frameTable[uartIn].state = ENTRY_RADIO;
+		          frameTable[uartIn].frameno = rssim->size;
+		          frameTable[uartIn].timeout = 0;
+	              frameTable[uartIn].index = uartIn;
+	
+	              printFrameTable(uartIn);
 
-              ret = uartQueue[uartIn];
-              uartQueue[uartIn] = msg;
-                
-	          frameTable[uartIn].state = ENTRY_RADIO;
-	          frameTable[uartIn].frameno = rssim->size;
-	          frameTable[uartIn].timeout = 0;
-              frameTable[uartIn].index = uartIn;
+				  // now adjust the sfr and others using the current received data
+	              adjustLastReceivedFrame(rssim->size, uartIn);
+	              
+                  // send ack for reception
+                  ackDst = rssim->dst;
+                  post sendAck();
 
-              calculateLargestFrameReceived(rssim->size, uartIn);
-              
-              uartOut = uartIn;
-            
-              post uartSendTask();
+                  // send ack for reception
+	              //ackDst = rssim->dst;
+	              //post sendAck();
 
-              ackDst = rssim->dst;
-              post sendAck();
-
-              uartIn = (uartIn + 1) % UART_QUEUE_LEN;
-
+			       #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+			        
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("rlr:4");
+			                call DiagMsg.uint8(lastReceivedFrameIndex);
+			                call DiagMsg.send();
+			            }
+			        #endif
+                  if (!uartBusy) {
+                    post uartSendTask();
+                    uartBusy = TRUE;
+                  }
+                  //uartIn = (uartIn + 1) % UART_QUEUE_LEN;
+               //}
             }
         }
         return ret;
       }
-
-    uint8_t getFrameNo(uint32_t logsize) {
-        uint8_t frameidx;
-        frameidx = (currentClientLogSize - logsize) % UART_QUEUE_LEN;
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("rlr:3");
-                call DiagMsg.uint8(frameidx);
-                call DiagMsg.send();
-            }
-        #endif
-        return frameidx; 
-    }
-
-    uint32_t getLastFrameReceived(uint32_t frameno) {
-        uint8_t i;
-        uint8_t index;
-        uint32_t ackno = frameno;
-        uint8_t lastindex = getFrameNo(largestFrameReceived);
-        for (i = lastindex; i < (lastindex + UART_QUEUE_LEN); i++) {
-            index = i % UART_QUEUE_LEN;
-
-        #ifdef MOTE_DEBUG_MESSAGES
-        
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("rlr:3");
-                call DiagMsg.uint8(index);
-                call DiagMsg.uint32(frameTable[index].frameno);
-                call DiagMsg.send();
-            }
-        #endif
-
-              if (frameTable[index].frameno == 0) {
-                return ackno;
-              } else {
-                // no not here
-                ackno = frameTable[index].frameno;
-              }
-        }       
-    }
 
       task void uartSendTask() {
         uint8_t len;
@@ -415,43 +522,84 @@ implementation {
         message_t* msg;
         am_group_t grp;
         uint8_t tmpLen;
+
+       #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
-        msg = uartQueue[uartOut];
-        tmpLen = len = call RadioPacket.payloadLength(msg);
-        id = call RadioAMPacket.type(msg);
-        addr = call RadioAMPacket.destination(msg);
-        src = call RadioAMPacket.source(msg);
-        grp = call RadioAMPacket.group(msg);
-        call UartPacket.clear(msg);
-        call UartAMPacket.setSource(msg, src);
-        call UartAMPacket.setGroup(msg, grp);
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ust:0");
+                call DiagMsg.uint8(lastReceivedFrameIndex);
+                call DiagMsg.uint8(uartOut);
+                call DiagMsg.send();
+            }
+        #endif
 
-        frameTable[uartOut].state = ENTRY_UART;
-    
-        if (call UartSend.send(addr, uartQueue[uartOut], len) == SUCCESS)
-          call Leds.led1Toggle();
-        else
-          {
-        failBlink();
-        post uartSendTask();
+	    atomic
+	      if (lastReceivedFrameIndex == uartOut)
+	    {
+	      uartBusy = FALSE;
+	      return;
+	    }
 
-      }
+       #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("ust:1");
+                call DiagMsg.send();
+            }
+        #endif
+
+        //if (frameTable[uartOut].state == ENTRY_RADIO) {
+	        msg = uartQueue[uartOut];
+	        tmpLen = len = call RadioPacket.payloadLength(msg);
+	        id = call RadioAMPacket.type(msg);
+	        addr = call RadioAMPacket.destination(msg);
+	        src = call RadioAMPacket.source(msg);
+	        grp = call RadioAMPacket.group(msg);
+	        call UartPacket.clear(msg);
+	        call UartAMPacket.setSource(msg, src);
+	        call UartAMPacket.setGroup(msg, grp);
+	        
+	        atomic {
+	          frameTable[uartOut].state = ENTRY_UART;
+			}
+				
+	        if (call UartSend.send(addr, uartQueue[uartOut], len) == SUCCESS) {
+		          call Leds.led1Toggle();
+	        }
+	        else
+	          {
+		        failBlink();
+		        post uartSendTask();
+	        }
+		//}
     }
     
     event void UartSend.sendDone(message_t* msg, error_t error) {
         if (error != SUCCESS) {
           failBlink();
-          post uartSendTask();
         }
         else
           atomic
         if (msg == uartQueue[uartOut])
           {
- 	        frameTable[uartOut].state = ENTRY_EMPTY;
+            lastUartedFrameIndex = uartOut;
+            lastUartedFrameNo = frameTable[uartOut].frameno;
+
+            // now adjust the sfr and others using the current received data
+            adjustAcceptableSlidingWindows(lastUartedFrameNo, lastUartedFrameIndex);
+
+            frameTable[uartOut].state = ENTRY_EMPTY;
             frameTable[uartOut].frameno = 0;
             frameTable[uartOut].timeout = 0;
             frameTable[uartOut].index = 0;
+            
+            if (++uartOut >= UART_QUEUE_LEN)
+              uartOut = 0;
           }
+          
+        post uartSendTask();
     }
 
     task void sendAck()
@@ -459,10 +607,11 @@ implementation {
         uint32_t time;
         wren_ack_msg_t* sm;
         if(!acklocked) {
+            
             time  = call GlobalTime.getLocalTime();
             sm = (wren_ack_msg_t*)call RadioPacket.getPayload(&swppacket, sizeof(wren_ack_msg_t));
     
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 if (call DiagMsg.record())
                 {
                     call DiagMsg.str("ack:1");
@@ -475,17 +624,16 @@ implementation {
                 return;
             }
             
-            sm->ackNumber = largestFrameReceived; 
-            sm->index = largestFrameReceivedIndex;
-            sm->waitForAck = waitForAck;
+            sm->seqno = ++ackseqno;
+            sm->ackNumber = lastUartedFrameNo; 
             
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("ack:2");
                 call DiagMsg.uint16(ackDst);
-                call DiagMsg.uint32(sm-> ackNumber);
-                call DiagMsg.uint8(sm->index);
+                call DiagMsg.uint32(sm->seqno);
+                call DiagMsg.uint32(sm->ackNumber);
                 call DiagMsg.send();
             }
         #endif
@@ -504,21 +652,26 @@ implementation {
     }
 
     event void AckSend.sendDone(message_t* msg, error_t err) {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
             if (call DiagMsg.record())
             {
-                call DiagMsg.str("swp:sd");
+                call DiagMsg.str("ack:sd");
                 call DiagMsg.send();
             }
         #endif
         acklocked = FALSE;
-
+        
+        if (ackAttempt == 0 && lastUartedFrameNo > 0) {
+          // In case ack packet gets lost
+          call AckTimer.startPeriodic(ACK_INTERVAL);
+        }
+        
       // need to see if we can uart data
-      if (largestFrameReceived < lastFrameUarted) {
-        uartOut = lastUARTIndex + 1;
-        post uartSendTask();
-      }
+      //if (lastReceivedFrameNo < lastUartedFrameNo) {
+      //  uartOut = lastUartedFrameIndex + 1;
+      //  post uartSendTask();
+      //}
     }
 
 
@@ -533,7 +686,7 @@ implementation {
     }
 
     event void BaseStatusSend.sendDone(message_t* msg, error_t err) {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
             if (call DiagMsg.record())
             {
@@ -595,10 +748,10 @@ implementation {
         switch(currentCMD)
         {
             case CMD_DOWNLOAD:
-            
+               recordCount = 0;
                call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
         
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -610,7 +763,7 @@ implementation {
 
     //            if (call CMDSend.send(AM_BROADCAST_ADDR, msg, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
                 if (call CMDSend.send(currentDST, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -621,7 +774,7 @@ implementation {
                     cmdlocked = TRUE;
                 }
                 else {
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -660,7 +813,7 @@ implementation {
                call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
         
                 if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -671,7 +824,7 @@ implementation {
                     cmdlocked = TRUE;
                 }
                 else {
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -762,18 +915,19 @@ implementation {
                 
                 
                 currentClientLogSize = rkcm->logsize;
-                //largestFrameReceived = rkcm->logsize;
+                //lastReceivedFrameNo = rkcm->logsize;
                 
                 recordCount = 0;
+                ackseqno = 0;
                 
 //                if (rkcm->logsize > 0)
-//                    largestAcceptableFrame = rkcm->logsize - 1;
+//                    lastAcceptableFrameNo = rkcm->logsize - 1;
 //                else
-//                    largestAcceptableFrame = rkcm->logsize;
+//                    lastAcceptableFrameNo = rkcm->logsize;
                     
                 rkcm->channel = rcm->channel;
 
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -801,7 +955,7 @@ implementation {
             }
             rkcm->isAcked = 1;
 
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -825,7 +979,7 @@ implementation {
     }
 
     event void ConnectionSend.sendDone(message_t* msg, error_t err) {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
             if (call DiagMsg.record())
             {
@@ -837,7 +991,7 @@ implementation {
     }
     
     event void CMDSend.sendDone(message_t* msg, error_t err) {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
             if (call DiagMsg.record())
             {

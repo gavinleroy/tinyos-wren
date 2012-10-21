@@ -171,6 +171,9 @@ implementation {
   components BlinkC;
   App.Blink -> BlinkC;
   
+  components new TimerMilliC() as TimeoutTimer;
+  App.TimeoutTimer -> TimeoutTimer;
+  
   //components new VirtualizeTimerC(TMilli, WINDOWSIZE) as VirtualizeTimer;
   //App.VirtualizeTimer -> VirtualizeTimer;
 

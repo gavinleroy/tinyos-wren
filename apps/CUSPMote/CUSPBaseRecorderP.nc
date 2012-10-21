@@ -119,7 +119,8 @@ module CUSPBaseRecorderP {
 
         interface Blink;
 //        interface Timer<TMilli> as VirtualizeTimer[uint8_t num];
-        
+
+        interface Timer<TMilli> as TimeoutTimer;         
     }
 }
 implementation {
@@ -180,7 +181,6 @@ implementation {
     bool sleep = FALSE;
     bool halt = FALSE;
     bool stopDownload = FALSE;
-    bool waitForAck = FALSE;
     
     uint16_t counter = 0;
     config_t conf;
@@ -210,10 +210,12 @@ implementation {
 	
     uint8_t swLowIndex;
     uint8_t swUpperIndex;
-    uint32_t lastACKReceived;
-    uint8_t lastACKReceivedIndex;
-    uint32_t lastFrameSent;
-    uint32_t lastFrameSentIndex;
+    uint32_t lastReceivedACKNo;
+    uint8_t lastReceivedACKIndex;
+    uint32_t lastACKSeqNo;
+    
+    uint32_t lastSentFrameNo;
+    uint32_t lastSentFrameIndex;
     uint32_t nextFrameToSend;
     
     uint8_t lastRadioOut;
@@ -234,7 +236,11 @@ implementation {
     void sendConnection();
     task void radioSendTask();
     task void rssiLogRead();
-    uint8_t getIndexFromFrameReceived(uint32_t frameno);
+    
+    uint8_t getIndexFromLastSentFrameNo(uint32_t frameno);
+	uint8_t getIndexNumber(uint32_t input);
+	uint32_t slideDownWindows(uint32_t input);
+	uint32_t slideUpWindows(uint32_t input);
 
     void clearFrameTable()
     {
@@ -243,6 +249,8 @@ implementation {
             frameTable[i].state = ENTRY_EMPTY;
             frameTable[i].frameno = 0;
             frameTable[i].timeout = 0;
+            frameTable[i].index = 0;
+            frameTable[i].attempt = 0;
         }
     }
     
@@ -271,8 +279,10 @@ implementation {
         sleep = FALSE;
         messageCount = 0;
 
-        lastACKReceived = 0;
-        lastFrameSent = 0;
+        lastReceivedACKNo = 0;
+        lastACKSeqNo = 0;
+        
+        lastSentFrameNo = 0;
         nextFrameToSend = 0;
         
         connectionAttempt = 0;
@@ -554,15 +564,23 @@ implementation {
     }
 
     event void DownloadTimer.fired() {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("dt-f:1");
                 call DiagMsg.send();
             }
         #endif
+
+        atomic {
+            if (lastSentFrameNo > (slideDownWindows(lastReceivedACKNo))) {
+                post rssiLogRead();
+            } else {
+                call ReTransmitTimer.startOneShot(RETRANSMIT_INTERVAL);            
+            }
+        }
                 
-        call TransmitTimer.startPeriodic(TRANSMIT_INTERVAL);
+        //call TransmitTimer.startPeriodic(TRANSMIT_INTERVAL);
     }
 
     event void AckTimer.fired() {
@@ -572,7 +590,7 @@ implementation {
 
     event void TransmitTimer.fired() {
         atomic {
-	        if (lastFrameSent > (lastACKReceived - (WINDOWSIZE - 1))) {
+	        if (lastSentFrameNo > (slideDownWindows(lastReceivedACKNo))) {
 	            post rssiLogRead();
 	        } else {
 	            call ReTransmitTimer.startOneShot(RETRANSMIT_INTERVAL);            
@@ -582,7 +600,7 @@ implementation {
 
     event void ReTransmitTimer.fired() {
         
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rt:0");
@@ -590,9 +608,9 @@ implementation {
             }
         #endif
     
-        radioOut = (lastACKReceivedIndex + 1) % RADIO_QUEUE_LEN;
+        radioOut = getIndexNumber(lastReceivedACKIndex + 1);
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rt:1");
@@ -607,7 +625,7 @@ implementation {
                 call TransmitTimer.stop();
             }
             else {
-		        #ifdef MOTE_DEBUG_MESSAGES
+		        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
 		            if (call DiagMsg.record())
 		            {
 		                call DiagMsg.str("rt:2");
@@ -620,7 +638,7 @@ implementation {
             }
         }
         else {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rt:3");
@@ -634,15 +652,69 @@ implementation {
         }
     }
 
-    uint8_t getFrameNo(uint32_t logsize) {
-        uint8_t frameidx;
-        frameidx = (currentClientLogSize - logsize) % RADIO_QUEUE_LEN;
-        return frameidx; 
+    void TimeoutFrameTable()
+    {
+        int8_t i;
+        int8_t index;
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("tft:0");
+                call DiagMsg.send();
+            }
+        #endif
+        for(i = lastReceivedACKIndex; i < (lastReceivedACKIndex + RADIO_QUEUE_LEN); ++i) {
+            index = getIndexNumber(i);    
+        
+            if (frameTable[index].state != ENTRY_ACK && frameTable[index].state != ENTRY_EMPTY) {
+		    
+		        radioOut = frameTable[index].index;
+                frameTable[index].attempt++;
+
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("tft:1");
+		                call DiagMsg.uint8(radioOut);
+                        call DiagMsg.uint8(frameTable[index].attempt);
+                        call DiagMsg.send();
+                    }
+                #endif
+                post radioSendTask();   
+
+                if (frameTable[index].attempt > 5) {
+                    // maybe give up
+                    frameTable[index].state = ENTRY_EMPTY;
+                }
+            }
+        }
     }
+
+    event void TimeoutTimer.fired() {
+        TimeoutFrameTable();
+    }
+
+	uint8_t getIndexNumber(uint32_t input) {
+		return input % RADIO_QUEUE_LEN;
+	}
+
+	uint32_t slideDownWindows(uint32_t input) {
+        if (input <= RADIO_QUEUE_LEN) {
+          return 0;
+        } else {
+          return input - (RADIO_QUEUE_LEN - 1);
+        }   
+
+		//return input - (RADIO_QUEUE_LEN - 1);	
+	}
+
+	uint32_t slideUpWindows(uint32_t input) {
+		return input + (RADIO_QUEUE_LEN - 1);	
+	}
 
     task void rssiLogRead() 
     {
-        if (!stopDownload && !waitForAck) {            
+        if (!stopDownload) {            
             if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
             }
         }            
@@ -651,7 +723,7 @@ implementation {
     event void LogRead.readDone(void* buf, storage_len_t len, error_t err) {
         rssi_serial_msg_t* rcm;
         
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("lr-rd:0");
@@ -661,7 +733,7 @@ implementation {
 
         if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
 
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             
                 if (call DiagMsg.record())
                 {
@@ -670,7 +742,7 @@ implementation {
                 }
             #endif
              atomic {
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             
                 if (call DiagMsg.record())
                 {
@@ -683,21 +755,23 @@ implementation {
                 memcpy(rcm, &(m_entry.msg), m_entry.len);
 //                memcpy(radioQueue[radioIn], buf, len);
                 rcm->size = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-
+								
                 frameTable[radioIn].state = ENTRY_EMPTY;
                 frameTable[radioIn].frameno = rcm->size;
-                frameTable[radioIn].timeout = 0;
+                frameTable[radioIn].timeout = TIMEOUT_INTERVAL;
                 frameTable[radioIn].index = radioIn;
+                frameTable[radioIn].attempt = 0;
 
-                lastFrameSent = rcm->size;
-                lastFrameSentIndex = radioIn;
+                lastSentFrameNo = rcm->size;
+                lastSentFrameIndex = radioIn;
                 
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE
             
                 if (call DiagMsg.record())
                 {
                     call DiagMsg.str("lr-rd:3");
                     call DiagMsg.uint32(rcm->size);
+                    call DiagMsg.uint8(radioIn);
                     call DiagMsg.send();
                 }
             #endif
@@ -748,11 +822,12 @@ implementation {
         #endif        
         call LowPowerListening.setRemoteWakeupInterval(radioQueue[radioOut], 3);
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rst:0");
                 call DiagMsg.uint8(radioOut);
+                call DiagMsg.uint32(frameTable[radioOut].frameno);
                 call DiagMsg.send();
             }
         #endif
@@ -768,7 +843,7 @@ implementation {
     }
 
     event void RssiLogSend.sendDone(message_t* msg, error_t err) {
-#ifdef MOTE_DEBUG_MESSAGES
+#ifdef MOTE_DEBUG_MESSAGE_DETAIL
     if (call DiagMsg.record())
     {
         call DiagMsg.str("rls-sd:1");
@@ -784,14 +859,14 @@ implementation {
             if (msg == radioQueue[radioOut])
               {
                 frameTable[radioOut].state = ENTRY_RADIO;
-                  
+                //call TimeoutTimer.startOneShot(TIMEOUT_INTERVAL);
+                
                 //lastRadioIndex = radioOut;
-                //lastFrameSent = frameTable[radioOut].frameno;
+                //lastSentFrameNo = frameTable[radioOut].frameno;
                 //frameTable[radioOut].state = ENTRY_RADIO;
                 
                 //if (++radioOut >= RADIO_QUEUE_LEN) {
                 //  radioOut = 0;
-                //  waitForAck = TRUE;
                 //  call AckTimer.startPeriodic(ACK_INTERVAL);
                 //}
               }
@@ -807,7 +882,7 @@ implementation {
                             uint8_t len) {
     wren_ack_msg_t* rcm;
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("ack:0");
@@ -821,43 +896,68 @@ implementation {
             return msg;
         }
         else {
-            call AckTimer.stop();
-            // wren_ack_msg_t* rcm = (wren_ack_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(wren_ack_msg_t));
-            rcm = (wren_ack_msg_t*)payload;
-            
-        #ifdef MOTE_DEBUG_MESSAGES
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("ack:1");
-                call DiagMsg.uint32(rcm->ackNumber);
-                call DiagMsg.uint8(rcm->index);
-                call DiagMsg.uint8(rcm->waitForAck);
-                call DiagMsg.send();
-            }
-        #endif
+            atomic {
+	            call AckTimer.stop();
+	            // wren_ack_msg_t* rcm = (wren_ack_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(wren_ack_msg_t));
+	            rcm = (wren_ack_msg_t*)payload;
+	            
+				if (rcm->seqno > lastACKSeqNo) {
+					lastACKSeqNo = rcm->seqno;
+					
+		            lastReceivedACKNo = rcm->ackNumber;
+		            lastReceivedACKIndex = getIndexFromLastSentFrameNo(lastReceivedACKNo);
+				}
+				
+	            frameTable[lastReceivedACKIndex].state = ENTRY_ACK;
+	
+	        #ifdef MOTE_DEBUG_MESSAGE
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("ack:1");
+	                call DiagMsg.uint32(rcm->seqno);
+	                call DiagMsg.uint32(rcm->ackNumber);
+	                call DiagMsg.uint8(lastReceivedACKIndex);
+	                call DiagMsg.send();
+	            }
+	        #endif
 
-            lastACKReceived = rcm->ackNumber;
-            lastACKReceivedIndex = getIndexFromFrameReceived(lastACKReceived);
-            // ex) seqNum = 112, next should be 111
-            //lastACKReceivedIndex = rcm->index;
+            }
+
+            if (lastSentFrameNo < lastReceivedACKNo) {
+                if ((lastReceivedACKNo - lastSentFrameNo) > 1) {
+                    // Something not delieved
+                    radioOut = getIndexNumber(lastReceivedACKIndex + 1);
+                    post radioSendTask();
+                }
+            }
             
-            //radioOut = lastACKReceivedIndex;
-            waitForAck = rcm->waitForAck;
+            if (lastReceivedACKNo <= RADIO_QUEUE_LEN) {
+                post rssiLogRead();
+            } else {
+	            if (lastSentFrameNo > (slideDownWindows(lastReceivedACKNo))) {
+	                post rssiLogRead();
+	            }
+            }
+            // ex) seqNum = 112, next should be 111
+            //lastReceivedACKIndex = rcm->index;
+            
+            //radioOut = lastReceivedACKIndex;
+			
         }
     }
     return msg;
   }
 
-    uint8_t getIndexFromFrameReceived(uint32_t frameno) {
+    uint8_t getIndexFromLastSentFrameNo(uint32_t frameno) {
         uint8_t i;
         uint8_t index;
          
-        i = (frameno - lastFrameSent);
-        if (lastFrameSentIndex < i) {
-            index = (lastFrameSentIndex + (WINDOWSIZE - i)) % RADIO_QUEUE_LEN;
+        i = (frameno - lastSentFrameNo);
+        if (lastSentFrameIndex < i) {
+            index = getIndexNumber(lastSentFrameIndex + (RADIO_QUEUE_LEN - i));
         }
         else {
-            index = (lastFrameSentIndex - i) % RADIO_QUEUE_LEN;           
+            index = getIndexNumber(lastSentFrameIndex - i);           
         }
                        
         return index;
@@ -960,7 +1060,7 @@ implementation {
 
     task void changeChannelTask() {
         error_t err;
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("cct:1");
@@ -976,7 +1076,7 @@ implementation {
                 //signal RadioChannel.setChannelDone();
             }
             
-            process_command();
+            //process_command();
         }
         else {
             call Leds.led0Toggle();
@@ -987,7 +1087,6 @@ implementation {
     task void startDownload() {
         download = 0;
         stopDownload = FALSE;
-        waitForAck = FALSE;
         sleep = FALSE;
         //call LowPowerListening.setLocalWakeupInterval(0);
         
@@ -995,7 +1094,7 @@ implementation {
         // rssi log message by using the channel
         // First get the channel it needs to use
         
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("d:");
@@ -1019,7 +1118,7 @@ implementation {
     }
     
     void process_command() {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("pc-r:0");
@@ -1223,7 +1322,7 @@ implementation {
         time  = call GlobalTime.getLocalTime();
         sm = (wren_connection_msg_t*)call Packet.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("shs:1");
@@ -1246,9 +1345,10 @@ implementation {
             sm->isAcked = 0;
             
             currentClientLogSize = sm->logsize;
-            lastACKReceived = sm->logsize;
-            lastFrameSent = sm->logsize;
+            lastReceivedACKNo = sm->logsize;
+            lastSentFrameNo = sm->logsize;
             nextFrameToSend = sm->logsize;
+            lastACKSeqNo = 0;
             
             #ifdef RF233_USE_SECOND_RFPOWER
                 call PacketTransmitPower.set(&connectionpacket, RF233_SECOND_RFPOWER);
@@ -1256,7 +1356,7 @@ implementation {
     
             call LowPowerListening.setRemoteWakeupInterval(&connectionpacket, 3);
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("shs:1");
@@ -1281,7 +1381,7 @@ implementation {
                             uint8_t len) {
     wren_connection_msg_t* rcm;
     
-    #ifdef MOTE_DEBUG_MESSAGES
+    #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         if (call DiagMsg.record())
         {
             call DiagMsg.str("hsr:0");
@@ -1290,7 +1390,7 @@ implementation {
     #endif
 
     if (call AMPacket.isForMe(msg)) {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("hsr:1");
@@ -1299,7 +1399,7 @@ implementation {
         #endif
 
         if (len != sizeof(wren_connection_msg_t)) {
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 if (call DiagMsg.record())
                 {
                     call DiagMsg.str("hsr:e");
@@ -1314,7 +1414,7 @@ implementation {
             // stop the connection timer 
             call WRENConnectionTimer.stop();
 
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 if (call DiagMsg.record())
                 {
                     call DiagMsg.str("hsr:2");
@@ -1332,7 +1432,7 @@ implementation {
             currentChannel = rcm->channel;        
             currentDST = rcm->dst;
             
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -1371,7 +1471,7 @@ implementation {
                             uint8_t len) {
     cmd_serial_msg_t* rcm;
     
-    #ifdef MOTE_DEBUG_MESSAGES
+    #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         if (call DiagMsg.record())
         {
             call DiagMsg.str("cmdR:0");
@@ -1380,7 +1480,7 @@ implementation {
     #endif
 
     if (call AMPacket.isForMe(msg)) {
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("cmdR:1");
@@ -1389,7 +1489,7 @@ implementation {
         #endif
 
         if (len != sizeof(cmd_serial_msg_t)) {
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 if (call DiagMsg.record())
                 {
                     call DiagMsg.str("cmdR:e");
@@ -1401,7 +1501,7 @@ implementation {
             return msg;
         }
         else {
-            #ifdef MOTE_DEBUG_MESSAGES
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 if (call DiagMsg.record())
                 {
                     call DiagMsg.str("cmdR:2");
@@ -1419,7 +1519,7 @@ implementation {
             currentChannel = rcm->channel;        
             currentDST = rcm->dst;
 
-                #ifdef MOTE_DEBUG_MESSAGES
+                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
                     if (call DiagMsg.record())
                     {
@@ -1488,7 +1588,7 @@ implementation {
             return msg;
         }
 
-        #ifdef MOTE_DEBUG_MESSAGES
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rec:1");
@@ -1533,7 +1633,7 @@ implementation {
                         return msg;
                     }
 
-                    #ifdef MOTE_DEBUG_MESSAGES
+                    #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                         if (call DiagMsg.record())
                         {
                             call DiagMsg.str("rec:2");
@@ -1733,7 +1833,7 @@ implementation {
 
     event void AMSend.sendDone(message_t* msg, error_t err) {
 
-#ifdef MOTE_DEBUG_MESSAGES
+#ifdef MOTE_DEBUG_MESSAGE_DETAIL
     if (call DiagMsg.record())
     {
         call DiagMsg.str("as");
