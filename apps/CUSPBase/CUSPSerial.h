@@ -60,6 +60,7 @@ typedef nx_struct wren_connection_msg {
     nx_uint32_t logsize;
     nx_uint8_t channel;
     nx_uint8_t isAcked;
+    nx_uint8_t reset;
 } wren_connection_msg_t;
 
 typedef nx_struct wren_ack_msg {
@@ -89,19 +90,19 @@ enum {
 };
 
 enum {
-    CMD_DOWNLOAD        = 0,
-    CMD_ERASE           = 1,
-    CMD_START_SENSE     = 2,
-    CMD_STOP_SENSE      = 3,
-    CMD_STATUS          = 4,
-    CMD_START_BLINK     = 5,
-    CMD_STOP_BLINK      = 6,
-    CMD_LOGSYNC         = 7,
-    CMD_BASESTATUS      = 8,
-    CMD_NONE            = 9,
-    CMD_CHANNEL         = 10,
-    CMD_CHANNEL_RESET   = 11,
-    CMD_WREN_STATUS     = 12,
+    CMD_DOWNLOAD            = 0,
+    CMD_ERASE               = 1,
+    CMD_START_SENSE         = 2,
+    CMD_STOP_SENSE          = 3,
+    CMD_STATUS              = 4,
+    CMD_START_BLINK         = 5,
+    CMD_STOP_BLINK          = 6,
+    CMD_LOGSYNC             = 7,
+    CMD_BASESTATUS          = 8,
+    CMD_NONE                = 9,
+    CMD_CHANNEL             = 10,
+    CMD_CHANNEL_RESET       = 11,
+    CMD_WREN_STATUS         = 12,
 };
 
 enum {

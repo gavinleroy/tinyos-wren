@@ -79,7 +79,6 @@ module CUSPBaseRecorderP {
         interface Timer<TMilli> as StatusRandomTimer;
         interface Timer<TMilli> as WRENStatusTimer;
         interface Timer<TMilli> as WRENConnectionTimer;
-        interface Timer<TMilli> as WRENTimeoutTimer;
         interface Timer<TMilli> as AckTimer;
         interface Timer<TMilli> as TransmitTimer;
         interface Timer<TMilli> as ReTransmitTimer;
@@ -140,7 +139,7 @@ implementation {
 
     enum {
         CONFIG_ADDR = 0,
-        CONFIG_VERSION = 7,
+        CONFIG_VERSION = 8,
     };
 
     enum {
@@ -224,16 +223,17 @@ implementation {
     FrameItem frameTable[RADIO_QUEUE_LEN];
     
     uint8_t connectionAttempt;
+    uint8_t connectionReset;
     
     task void logWriteTask();
-    void sendStatus();
-    void sendStatusToController();
-    void sendWRENStatus();
+    task void sendStatus();
+    task void sendStatusToController();
+    task void sendWRENStatus();
     void shutdown(bool all);
     void saveSensing(bool sense);
     task void changeChannelTask();
-    void process_command();
-    void sendConnection();
+    task void process_command();
+    task void sendConnection();
     task void radioSendTask();
     task void rssiLogRead();
     
@@ -286,6 +286,8 @@ implementation {
         nextFrameToSend = 0;
         
         connectionAttempt = 0;
+        connectionReset = 0;
+        
         lastRadioOut = 0;
         transmitAttempt = 0;
         
@@ -411,7 +413,7 @@ implementation {
 
     event void RadioChannel.setChannelDone() {
         // Start downloading ...
-        process_command();
+        post process_command();
     }
 
     event void AMControl.stopDone(error_t err) {
@@ -447,7 +449,7 @@ implementation {
         {
             // we should send a status update to keep time.
             // sendStatus();
-            sendStatusToController();
+            post sendStatusToController();
 
         }
         
@@ -531,31 +533,20 @@ implementation {
     }
 
     event void StatusRandomTimer.fired() {
-        sendStatusToController();
+        post sendStatusToController();
     }
 
     event void WRENStatusTimer.fired() {
-        sendWRENStatus();
+        post sendWRENStatus();
     }
 
     event void WRENConnectionTimer.fired() {
 		if (connectionAttempt < CONNECTION_ATTEMPT) {
 		    connectionAttempt++;
-        	sendConnection();
+        	post sendConnection();
         } else {
 			// give up now after # of trials        	
         	call WRENConnectionTimer.stop();
-        }
-    }
-
-    event void WRENTimeoutTimer.fired() {
-
-        if (connectionAttempt < TRANSMIT_ATTEMPT) {
-            connectionAttempt++;
-            sendConnection();
-        } else {
-            // give up now after # of trials            
-            call WRENConnectionTimer.stop();
         }
     }
 
@@ -714,6 +705,13 @@ implementation {
 
     task void rssiLogRead() 
     {
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("rlr:0");
+                call DiagMsg.send();
+            }
+        #endif
         if (!stopDownload) {            
             if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
             }
@@ -762,9 +760,15 @@ implementation {
                 frameTable[radioIn].index = radioIn;
                 frameTable[radioIn].attempt = 0;
 
+                
+                if ((lastSentFrameNo - rcm->size) > 1) {
+                    connectionReset = 1;
+                }
+
                 lastSentFrameNo = rcm->size;
                 lastSentFrameIndex = radioIn;
                 
+
             #ifdef MOTE_DEBUG_MESSAGE
             
                 if (call DiagMsg.record())
@@ -782,7 +786,18 @@ implementation {
                     radioIn = 0;
                 }                    
 
-                post radioSendTask();
+                if (connectionReset == 1) {
+                    // We have a problem here if the gab between two numbers is greater than 1, 
+                    // Do we want to keep going or stop. I think we need to keep going because
+                    // the data stored is this way. We can't recover them anyway.else {
+                    // So don't stop.    
+                    // We need to send commands to restart the sliding window buffer on the base station
+                    post sendConnection(); // with reset   
+                }
+                else {
+                    // connectionReset = 0;
+                    post radioSendTask();
+                }
             }
         }
         else {
@@ -794,15 +809,15 @@ implementation {
             logBusy = FALSE;
             logFull = FALSE;
                         
-            sendStatus();
+            post sendStatus();
             
-            sendStatusToController();
+            post sendStatusToController();
             
 /* don't erase log            
             if (call LogWrite.erase() == SUCCESS) {
             // Reached to the end of log. Let's erase so that LogRead and LogWrite.currentOffset become equal
                 isErased = 1;
-                sendStatus();
+                post sendStatus();
             }
 */                        
         }
@@ -822,7 +837,7 @@ implementation {
         #endif        
         call LowPowerListening.setRemoteWakeupInterval(radioQueue[radioOut], 3);
 
-        #ifdef MOTE_DEBUG_MESSAGE
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rst:0");
@@ -910,7 +925,7 @@ implementation {
 				
 	            frameTable[lastReceivedACKIndex].state = ENTRY_ACK;
 	
-	        #ifdef MOTE_DEBUG_MESSAGE
+	        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
 	            if (call DiagMsg.record())
 	            {
 	                call DiagMsg.str("ack:1");
@@ -921,6 +936,9 @@ implementation {
 	            }
 	        #endif
 
+	            if (connectionReset == 1) {
+	                return msg;
+	            }
             }
 
             if (lastSentFrameNo < lastReceivedACKNo) {
@@ -971,7 +989,7 @@ implementation {
         statuslocked = FALSE;
     }
 
-    void sendStatus()
+    task void sendStatus()
     {
         uint32_t time;
         serial_status_msg_t* sm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
@@ -1014,7 +1032,7 @@ implementation {
             call Blink.start();
             
             // let cmdcenter know that erase is finished.
-            // sendStatus();
+            // post sendStatus();
             call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
             
         }
@@ -1076,7 +1094,7 @@ implementation {
                 //signal RadioChannel.setChannelDone();
             }
             
-            //process_command();
+            //post process_command();
         }
         else {
             call Leds.led0Toggle();
@@ -1117,7 +1135,7 @@ implementation {
     
     }
     
-    void process_command() {
+    task void process_command() {
         #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
             {
@@ -1133,7 +1151,7 @@ implementation {
         {
             case CMD_DOWNLOAD:
                 //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
-                sendConnection();
+                post sendConnection();
                 // post startDownload();
                 break;
 
@@ -1181,6 +1199,7 @@ implementation {
             case CMD_STOP_SENSE:
                 call Leds.led0On();
 
+                stopDownload = TRUE;
                 download = 0;
                 sensing = FALSE;
                 sleep = FALSE;
@@ -1195,11 +1214,11 @@ implementation {
                 break;
 
             case CMD_STATUS:
-                // sendStatus();
+                // post sendStatus();
                 call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
 
                 // Send to Base
-                // sendStatusToController();
+                // post sendStatusToController();
                 
                 break;
                 
@@ -1244,11 +1263,11 @@ implementation {
         const uint16_t* newVal = call CommandValue.get();
         call Leds.led1Toggle();
         currentCMD = *newVal;
-        process_command();            
+        post process_command();            
     }
     #endif
  
-    void sendWRENStatus()
+    task void sendWRENStatus()
     {
         if(TOS_NODE_ID != TIMESYNC_NODEID) {
             uint32_t time = call GlobalTime.getLocalTime();
@@ -1278,7 +1297,7 @@ implementation {
         }
     }
 
-    void sendStatusToController()
+    task void sendStatusToController()
     {
         uint32_t time;
         serial_status_msg_t* sm = (serial_status_msg_t*)call Packet.getPayload(&statuspacket, sizeof(serial_status_msg_t));
@@ -1315,7 +1334,7 @@ implementation {
             }
     }
 
-    void sendConnection()
+    task void sendConnection()
     {
         uint32_t time;
         wren_connection_msg_t* sm;
@@ -1326,6 +1345,8 @@ implementation {
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("shs:1");
+                call DiagMsg.uint16(currentCMD);
+                call DiagMsg.uint16(currentDST);
                 call DiagMsg.send();
             }
         #endif
@@ -1343,6 +1364,7 @@ implementation {
             sm->logsize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
             sm->channel = call RadioChannel.getChannel();
             sm->isAcked = 0;
+            sm->reset = connectionReset;
             
             currentClientLogSize = sm->logsize;
             lastReceivedACKNo = sm->logsize;
@@ -1446,7 +1468,14 @@ implementation {
             
             
             if (rcm->isAcked == 1) {
-                post startDownload();
+                if (rcm->reset == 1) {
+                    atomic {
+                        connectionReset = 0;
+                    }
+                    post radioSendTask();    
+                } else {
+                    post startDownload();
+                }
             }
             else {
                 // change back to normal channel 11 or random backoff and try again
@@ -1462,7 +1491,7 @@ implementation {
 
     event void WRENSend.sendDone(message_t* msg, error_t err) {
         wrenlocked = FALSE;
-        call Blink.start();
+        //call Blink.start();
     }
 
 
@@ -1532,10 +1561,14 @@ implementation {
                 #endif
             
             if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL_RESET) {    
-                post changeChannelTask();
+                if (call RadioChannel.getChannel() != currentChannel) {
+                    post changeChannelTask();
+                } else {
+	               post process_command();
+                }
             }
             else {
-               process_command();
+               post process_command();
             }
             
         }
@@ -1563,7 +1596,7 @@ implementation {
                 post changeChannelTask();
             }
             else {
-               process_command();
+               post process_command();
             }
 
         }
@@ -1751,7 +1784,7 @@ implementation {
     event void LogWrite.syncDone(error_t err) {
         if (err == SUCCESS) {
             call StatusRandomTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
-//            sendStatus();
+//            post sendStatus();
         }
         else {
             call LogWrite.sync();

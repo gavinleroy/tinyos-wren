@@ -157,14 +157,15 @@ implementation {
     uint32_t recordCount;
     
     uint8_t ackAttempt;
+    uint16_t connectionClient;
     
     FrameItem frameTable[UART_QUEUE_LEN];
 
     task void changeChannelTask();
     task void uartSendTask();
-    void sendStatusToBase();
-    void sendCommand();
-    void sendConnection(wren_connection_msg_t* rkcm);
+    task void sendStatusToBase();
+    task void sendCommand();
+    task void sendConnection();
     task void sendAck();
     
     uint8_t getIndexFromLastFrameReceived(uint32_t frameno);
@@ -226,6 +227,8 @@ implementation {
         lastAcceptableFrameNo = 0;
         recordCount = 0;
         
+        connectionClient = 0;
+        
         ackseqno = 0;
         ackAttempt = 0;
         
@@ -262,12 +265,18 @@ implementation {
     }
 
     event void AckTimer.fired() {
-        if (ackAttempt <= ACK_ATTEMPT) {
+        
+        if (ACK_ATTEMPT == 0) {
             post sendAck();
-            ackAttempt++;
-        } else {
-            ackAttempt = 0;
-            call AckTimer.stop();
+        }
+        else {
+	        if (ackAttempt <= ACK_ATTEMPT) {
+	            post sendAck();
+	            ackAttempt++;
+	        } else {
+	            ackAttempt = 0;
+	            call AckTimer.stop();
+	        }
         }
     }
 
@@ -625,7 +634,8 @@ implementation {
             }
             
             sm->seqno = ++ackseqno;
-            sm->ackNumber = lastUartedFrameNo; 
+            sm->ackNumber = lastReceivedFrameNo; 
+            //sm->ackNumber = lastUartedFrameNo; 
             
         #ifdef MOTE_DEBUG_MESSAGE
             if (call DiagMsg.record())
@@ -697,7 +707,7 @@ implementation {
         basestatuslocked = FALSE;
     }
 
-    void sendStatusToBase()
+    task void sendStatusToBase()
     {
         uint32_t time;
         base_status_msg_t* sm = (base_status_msg_t*)call RadioPacket.getPayload(&basestatuspacket, sizeof(base_status_msg_t));
@@ -731,10 +741,10 @@ implementation {
     }
 
     event void RandomTimer2.fired() {
-        sendCommand();
+        post sendCommand();
     }
     
-    void sendCommand() {
+    task void sendCommand() {
        uint32_t time;
         time  = call GlobalTime.getLocalTime();
 
@@ -749,6 +759,11 @@ implementation {
         {
             case CMD_DOWNLOAD:
                recordCount = 0;
+		       ackAttempt == 0;
+	          // In case ack packet gets lost
+	          call AckTimer.startPeriodic(ACK_INTERVAL);
+               
+               /*
                call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
         
                 #ifdef MOTE_DEBUG_MESSAGE_DETAIL
@@ -785,7 +800,9 @@ implementation {
                     
                 }
                 break;
+*/
 
+                break;
             case CMD_ERASE:
                 break;
 
@@ -799,7 +816,7 @@ implementation {
                 break;
             
             case CMD_BASESTATUS:
-                sendStatusToBase();
+                post sendStatusToBase();
                 break;
 
             case CMD_START_BLINK:
@@ -810,7 +827,10 @@ implementation {
 
                 break;
             case CMD_CHANNEL_RESET:
-               call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
+                
+                call AckTimer.stop();
+                
+                call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
         
                 if (call CMDSend.send(AM_BROADCAST_ADDR, &cmdpacket, sizeof(cmd_serial_msg_t), time) == SUCCESS) {
                 #ifdef MOTE_DEBUG_MESSAGE_DETAIL
@@ -850,7 +870,7 @@ implementation {
             post changeChannelTask();
         }
         else {
-            sendStatusToBase();
+            post sendStatusToBase();
             call Leds.led1Toggle();
         }
     }                    
@@ -880,14 +900,14 @@ implementation {
                     post changeChannelTask();
                 }
                 else {
-                    sendCommand();
+                    post sendCommand();
                 } 
                 /*
                 if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL) { 
                     post changeChannelTask();
                 }
                 else {
-                    sendCommand();
+                    post sendCommand();
                 } 
                 */
             }
@@ -909,15 +929,18 @@ implementation {
                 wren_connection_msg_t* rcm = (wren_connection_msg_t*)payload;
                 
                 rkcm->src   = rcm->src;
+                
+                connectionClient = rcm->src;
+                
                 rkcm->cmd   = rcm->cmd;
                 rkcm->dst   = rcm->dst;
                 rkcm->logsize = rcm->logsize;
-                
+                rkcm->reset = rcm->reset;
                 
                 currentClientLogSize = rkcm->logsize;
                 //lastReceivedFrameNo = rkcm->logsize;
                 
-                recordCount = 0;
+                recordCount = 0; // This line is important that it is going to reset the sliding window
                 ackseqno = 0;
                 
 //                if (rkcm->logsize > 0)
@@ -926,6 +949,7 @@ implementation {
 //                    lastAcceptableFrameNo = rkcm->logsize;
                     
                 rkcm->channel = rcm->channel;
+                rkcm->isAcked = 1;
 
                 #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
@@ -937,23 +961,23 @@ implementation {
                     }
                 #endif
                 
-                sendConnection(rkcm);
+                post sendConnection();
             }
         }
         return msg;
     }
 
-    void sendConnection(wren_connection_msg_t* rkcm)
+    task void sendConnection()
     {
         uint32_t time;
         time  = call GlobalTime.getLocalTime();
 
         if(!connectionlocked) {
 
-            if (rkcm == NULL) {
-                return;
-            }
-            rkcm->isAcked = 1;
+            //if (rkcm == NULL) {
+            //    return;
+            //}
+            // rkcm->isAcked = 1;
 
                 #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 
@@ -972,7 +996,8 @@ implementation {
                 call LowPowerListening.setRemoteWakeupInterval(&connectionpacket, REMOTE_WAKEUP_INTERVAL);
         
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-                if (call ConnectionSend.send(rkcm->src, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
+//                if (call ConnectionSend.send(rkcm->src, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
+                if (call ConnectionSend.send(connectionClient, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
                     connectionlocked = TRUE;
                 }
             }
@@ -1032,10 +1057,22 @@ implementation {
             currentChannel = rcm->channel;
             currentDST     = rcm->dst;
 
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("srr:1");
+                    call DiagMsg.uint16(currentDST);
+                    call DiagMsg.uint8(currentChannel);
+                    call DiagMsg.send();
+                }
+            #endif
+
             rkcm->cmd   = rcm->cmd;
             // rkcm->dst   = rcm->dst;
             rkcm->dst   = TOS_NODE_ID;
             rkcm->channel = rcm->channel;
+
 
             /*            
             if (currentCMD == CMD_DOWNLOAD || currentCMD == CMD_CHANNEL) { 
@@ -1043,11 +1080,11 @@ implementation {
                     post changeChannelTask();
                 }
                 else {
-                    sendCommand();
+                    post sendCommand();
                 }
             }
             else {
-                sendCommand();
+                post sendCommand();
             } 
             */
 
@@ -1055,7 +1092,7 @@ implementation {
                 post changeChannelTask();
             }
             else {
-                sendCommand();
+                post sendCommand();
             } 
         
         }
