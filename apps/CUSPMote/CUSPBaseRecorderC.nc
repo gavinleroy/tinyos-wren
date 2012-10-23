@@ -98,8 +98,8 @@ implementation {
   App.WRENSend         -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_WREN_STATUS_MSG];
   App.RssiLogSend      -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_RSSI_SERIAL_MSG];
 
-  App.ConnectionReceive       -> RF233TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
-  App.ConnectionSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
+  App.ConnectionReceive       -> RF233TimeSyncMessageC.Receive[AM_CONNECTION_MSG];
+  App.ConnectionSend          -> RF233TimeSyncMessageC.TimeSyncAMSendMilli[AM_CONNECTION_MSG];
 
   App.AckReceive       -> RF233TimeSyncMessageC.Receive[AM_SWP_MSG];
 

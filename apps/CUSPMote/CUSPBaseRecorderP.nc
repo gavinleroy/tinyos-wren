@@ -206,6 +206,7 @@ implementation {
     uint8_t currentChannel;
     uint16_t currentDST;
 	uint32_t currentClientLogSize;
+	uint16_t wrenSendStatusTo;
 	
     uint8_t swLowIndex;
     uint8_t swUpperIndex;
@@ -224,6 +225,7 @@ implementation {
     
     uint8_t connectionAttempt;
     uint8_t connectionReset;
+    uint8_t connectionClose;
     
     task void logWriteTask();
     task void sendStatus();
@@ -275,6 +277,7 @@ implementation {
         currentChannel = RF233_DEF_CHANNEL;
         currentDST = AM_BROADCAST_ADDR; //default download base station in case
         currentClientLogSize = 0;
+        wrenSendStatusTo = CONTROLLER_NODEID;
         
         sleep = FALSE;
         messageCount = 0;
@@ -287,6 +290,7 @@ implementation {
         
         connectionAttempt = 0;
         connectionReset = 0;
+        connectionClose = 0;
         
         lastRadioOut = 0;
         transmitAttempt = 0;
@@ -714,6 +718,7 @@ implementation {
         #endif
         if (!stopDownload) {            
             if (call LogRead.read(&m_entry, sizeof(logentry_t)) != SUCCESS) {
+                post rssiLogRead();
             }
         }            
     }
@@ -721,7 +726,7 @@ implementation {
     event void LogRead.readDone(void* buf, storage_len_t len, error_t err) {
         rssi_serial_msg_t* rcm;
         
-        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        #ifdef MOTE_DEBUG_MESSAGE
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("lr-rd:0");
@@ -729,6 +734,11 @@ implementation {
             }
         #endif
 
+        if (err != SUCCESS) {
+            post rssiLogRead();
+                        
+        }
+        else {
         if ( (len == sizeof(logentry_t)) && (buf == &m_entry) ) {
 
             #ifdef MOTE_DEBUG_MESSAGE_DETAIL
@@ -801,17 +811,38 @@ implementation {
             }
         }
         else {
+        #ifdef MOTE_DEBUG_MESSAGE
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("lr-rd:f");
+                call DiagMsg.send();
+            }
+        #endif
             // log is empty..., set the busy flag to false
             download = 1;
+            connectionClose = 1;
             
             // reset to default
             logIn = logOut = 0;
             logBusy = FALSE;
             logFull = FALSE;
-                        
-            post sendStatus();
             
-            post sendStatusToController();
+            // Send the download status to the base station
+            wrenSendStatusTo = currentDST;
+            // call WRENStatusTimer.startPeriodic(STATUS_INTERVAL);
+
+            // WE are done. Close the connection now.
+            //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+            post sendConnection();
+
+            
+            
+            // Send the WREN status to the Base Station to indicate that the download is done.
+            //post sendWRENStatus();
+                        
+            //post sendStatus();
+            
+            //post sendStatusToController();
             
 /* don't erase log            
             if (call LogWrite.erase() == SUCCESS) {
@@ -820,6 +851,83 @@ implementation {
                 post sendStatus();
             }
 */                        
+        }
+        }
+    }
+
+    task void sendWRENStatus()
+    {
+        if(TOS_NODE_ID != TIMESYNC_NODEID) {
+            uint32_t time = call GlobalTime.getLocalTime();
+            wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
+
+        #ifdef MOTE_DEBUG_MESSAGE
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("sws:0");
+                call DiagMsg.uint16(wrenSendStatusTo);
+                call DiagMsg.uint8(wrenlocked);
+                call DiagMsg.send();
+            }
+        #endif
+    
+            if(!wrenlocked) {
+    
+                if (sm == NULL) {
+                    return;
+                }
+
+                sm->src = TOS_NODE_ID;
+                sm->sensing = sensing;
+                sm->buffersize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
+                sm->download = download;
+                
+                #ifdef MOTE_DEBUG_MESSAGE
+                    if (call DiagMsg.record())
+                    {
+                        call DiagMsg.str("sws:1");
+                        call DiagMsg.uint16(sm->src);
+                        call DiagMsg.uint32(sm->buffersize);
+                        call DiagMsg.uint8(sm->download);
+                        call DiagMsg.uint8(call RadioChannel.getChannel());
+                        call DiagMsg.send();
+                    }
+                #endif
+
+    //            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+                // 0 address: Controller
+
+                #ifdef RF233_USE_SECOND_RFPOWER
+                    call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+                #endif        
+        
+                call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 3);
+                //if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+                if (call WRENSend.send(wrenSendStatusTo, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+                    wrenlocked = TRUE;
+                } else {
+                    wrenlocked = FALSE;
+                    post sendWRENStatus();
+                }
+            }
+        }
+    }
+
+    event void WRENSend.sendDone(message_t* msg, error_t err) {
+        wrenlocked = FALSE;
+        //call Blink.start();
+        if (err == SUCCESS) {
+            #ifdef MOTE_DEBUG_MESSAGE
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("sws:2");
+                    call DiagMsg.send();
+                }
+            #endif
+            //wrenSendStatusTo = CONTROLLER_NODEID;
+        }
+        else {
+            post sendWRENStatus();
         }
     }
 
@@ -925,12 +1033,13 @@ implementation {
 				
 	            frameTable[lastReceivedACKIndex].state = ENTRY_ACK;
 	
-	        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+	        #ifdef MOTE_DEBUG_MESSAGE
 	            if (call DiagMsg.record())
 	            {
 	                call DiagMsg.str("ack:1");
 	                call DiagMsg.uint32(rcm->seqno);
 	                call DiagMsg.uint32(rcm->ackNumber);
+                    call DiagMsg.uint32(lastSentFrameNo);
 	                call DiagMsg.uint8(lastReceivedACKIndex);
 	                call DiagMsg.send();
 	            }
@@ -950,6 +1059,15 @@ implementation {
             }
             
             if (lastReceivedACKNo <= RADIO_QUEUE_LEN) {
+	            #ifdef MOTE_DEBUG_MESSAGE
+	                if (call DiagMsg.record())
+	                {
+	                    call DiagMsg.str("ack:2");
+	                    call DiagMsg.uint8(stopDownload);
+	                    call DiagMsg.send();
+	                }
+	            #endif
+	
                 post rssiLogRead();
             } else {
 	            if (lastSentFrameNo > (slideDownWindows(lastReceivedACKNo))) {
@@ -1147,6 +1265,8 @@ implementation {
         #endif
         
 		connectionAttempt = 0;
+		connectionClose = 0;
+		
         switch(currentCMD)
         {
             case CMD_DOWNLOAD:
@@ -1249,6 +1369,7 @@ implementation {
                 // Done before hitting here
                 break;       
             case CMD_WREN_STATUS:
+	            wrenSendStatusTo = CONTROLLER_NODEID;
                 call WRENStatusTimer.startOneShot((call Random.rand32()%STATUS_INTERVAL));
                 
                 break;         
@@ -1267,36 +1388,6 @@ implementation {
     }
     #endif
  
-    task void sendWRENStatus()
-    {
-        if(TOS_NODE_ID != TIMESYNC_NODEID) {
-            uint32_t time = call GlobalTime.getLocalTime();
-            wren_status_msg_t* sm = (wren_status_msg_t*)call Packet.getPayload(&wrenpacket, sizeof(wren_status_msg_t));
-    
-            if(!wrenlocked) {
-    
-                if (sm == NULL) {
-                    return;
-                }
-                sm->src = TOS_NODE_ID;
-                sm->sensing = sensing;
-                sm->buffersize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-    
-    //            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-                // 0 address: Controller
-
-                #ifdef RF233_USE_SECOND_RFPOWER
-                    call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
-                #endif        
-        
-                call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 3);
-                if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-                    wrenlocked = TRUE;
-                }
-            }
-        }
-    }
-
     task void sendStatusToController()
     {
         uint32_t time;
@@ -1341,7 +1432,7 @@ implementation {
         time  = call GlobalTime.getLocalTime();
         sm = (wren_connection_msg_t*)call Packet.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
 
-        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        #ifdef MOTE_DEBUG_MESSAGE
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("shs:1");
@@ -1365,6 +1456,7 @@ implementation {
             sm->channel = call RadioChannel.getChannel();
             sm->isAcked = 0;
             sm->reset = connectionReset;
+            sm->close = connectionClose;
             
             currentClientLogSize = sm->logsize;
             lastReceivedACKNo = sm->logsize;
@@ -1378,10 +1470,10 @@ implementation {
     
             call LowPowerListening.setRemoteWakeupInterval(&connectionpacket, 3);
 
-        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        #ifdef MOTE_DEBUG_MESSAGE
             if (call DiagMsg.record())
             {
-                call DiagMsg.str("shs:1");
+                call DiagMsg.str("shs:2");
                 call DiagMsg.uint16(currentDST);
                 call DiagMsg.send();
             }
@@ -1390,12 +1482,21 @@ implementation {
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
             if (call ConnectionSend.send(currentDST, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
                 connectionlocked = TRUE;
+            } else {
+                connectionlocked = FALSE;
+                post sendConnection();
             }
         }
     }
 
     event void ConnectionSend.sendDone(message_t* msg, error_t err) {
         connectionlocked = FALSE;
+        if (err == SUCCESS) {
+        }
+        else {
+            post sendConnection();
+        }
+        
     }
 
   event message_t * ConnectionReceive.receive(message_t *msg,
@@ -1488,12 +1589,6 @@ implementation {
     event void CMDSend.sendDone(message_t* msg, error_t err) {
         cmdlocked = FALSE;
     }
-
-    event void WRENSend.sendDone(message_t* msg, error_t err) {
-        wrenlocked = FALSE;
-        //call Blink.start();
-    }
-
 
   event message_t * CMDReceive.receive(message_t *msg,
                             void *payload,

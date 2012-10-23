@@ -203,8 +203,11 @@ class CmdCenter:
 
             # collect all client motes out there
             # print("exist", m.get_src(), self.motes.count(m.get_src()))
-            if self.deployingsensors.count(m.get_src()) == 0:
-                self.deployingsensors.append(m.get_src())
+            if m.get_download() == 1:
+                self.done_Mote(m.get_src())
+            else:
+                if self.deployingsensors.count(m.get_src()) == 0:
+                    self.deployingsensors.append(m.get_src())
             
         if msg.get_amType() == WRENConnectionMsg.AM_TYPE:
             with self.lock:
@@ -215,11 +218,14 @@ class CmdCenter:
                 m = WRENConnectionMsg.WRENConnectionMsg(msg.dataGet())
                 self.wrenconnectionmsgs[m.get_src()] = m
 
-            # collect all client sensors out there
-            # print("exist", m.get_src(), self.sensors.count(m.get_src()))
-            if self.sensors.count(m.get_src()) == 0 and m.get_logsize() > 0:
+            if m.get_close() == 1:
                 self.done_Mote(m.get_src())
-                self.sensors.append(m.get_src())
+            else:
+                # collect all client sensors out there
+                # print("exist", m.get_src(), self.sensors.count(m.get_src()))
+                if self.sensors.count(m.get_src()) == 0 and m.get_logsize() > 0:
+                    self.done_Mote(m.get_src())
+                    self.sensors.append(m.get_src())
                                 
         if msg.get_amType() == BaseStatusMsg.AM_TYPE:
             with self.lock:
@@ -407,6 +413,7 @@ class CmdCenter:
         
                        
     def done_Mote(self, nodeid):
+        print "download done for node id", nodeid
         self.clearDownloading(nodeid)
         time.sleep(1)
         self.download_Sensors()

@@ -53,11 +53,15 @@ module CUSPBaseRecorderP {
 
         interface TimeSyncAMSend<TMilli,uint32_t> as ConnectionSend;
         interface Receive as ConnectionReceive; // cmd receive
+        interface AMSend as SerialConnectionSend; //base serial status send
 
         interface TimeSyncAMSend<TMilli,uint32_t> as AckSend;
 
         interface Receive as BaseCMDReceive; // base receive
         interface TimeSyncAMSend<TMilli,uint32_t> as BaseStatusSend;
+
+        interface Receive as WRENReceive; // wren receive
+        interface AMSend as WRENSerialSend; // serial rssi send
         
         interface Receive as RssiLogReceive; // log receive
         
@@ -92,6 +96,7 @@ implementation {
 
         enum {
           UART_QUEUE_LEN = WINDOWSIZE,
+          WREN_QUEUE_LEN = 12,
           RADIO_QUEUE_LEN = 12,
         };
       
@@ -117,6 +122,11 @@ implementation {
       uint8_t    radioIn, radioOut;
       bool       radioBusy, radioFull;
 
+      message_t  wrenQueueBufs[WREN_QUEUE_LEN];
+      message_t  * ONE_NOK wrenQueue[WREN_QUEUE_LEN];
+      uint8_t    wrenIn, wrenOut;
+      bool       wrenBusy, wrenFull;
+
     bool m_busy = TRUE;
     logentry_t m_entry;
 
@@ -133,6 +143,7 @@ implementation {
     bool amsendlocked = FALSE;
     bool basestatuslocked = FALSE;
     bool connectionlocked = FALSE;
+    bool serialconnectionlocked = FALSE;
     bool acklocked = FALSE;
 
     uint16_t currentCMD;
@@ -167,6 +178,8 @@ implementation {
     task void sendCommand();
     task void sendConnection();
     task void sendAck();
+    task void wrenSendTask();
+    task void stopAckTimer();
     
     uint8_t getIndexFromLastFrameReceived(uint32_t frameno);
     uint32_t findFrameIndex(uint32_t frameno);
@@ -211,6 +224,12 @@ implementation {
         radioIn = radioOut = 0;
         radioBusy = FALSE;
         radioFull = TRUE;
+
+        for (i = 0; i < WREN_QUEUE_LEN; i++)
+          wrenQueue[i] = &wrenQueueBufs[i];
+        wrenIn = wrenOut = 0;
+        wrenBusy = FALSE;
+        wrenFull = TRUE;
 
         if (call RadioControl.start() == EALREADY)
           radioFull = FALSE;
@@ -353,7 +372,7 @@ implementation {
           }
         }  
         
-        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        #ifdef MOTE_DEBUG_MESSAGE
         
             if (call DiagMsg.record())
             {
@@ -875,6 +894,123 @@ implementation {
         }
     }                    
 
+    task void stopAckTimer() 
+    {
+        call AckTimer.stop();
+    }
+    
+     event message_t * WRENReceive.receive(message_t *msg,
+                                void *payload,
+                                uint8_t len) {
+        message_t *ret = msg;
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("wrr:0");
+                call DiagMsg.send();
+            }
+        #endif
+
+        wren_status_msg_t* rssim = (wren_status_msg_t*)payload;
+
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("wrr:1");
+                call DiagMsg.uint8(rssim->download);
+                call DiagMsg.send();
+            }
+        #endif
+
+        if (len == sizeof(wren_status_msg_t)) {
+            if (rssim->download == 1) {
+                post stopAckTimer();
+            }
+        }
+        #ifdef MOTE_DEBUG_MESSAGES
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("wrr:2");
+                call DiagMsg.send();
+            }
+        #endif
+        
+            atomic {
+              if (!wrenFull)
+            {
+              ret = wrenQueue[wrenIn];
+              wrenQueue[wrenIn] = msg;
+        
+              wrenIn = (wrenIn + 1) % WREN_QUEUE_LEN;
+            
+              if (wrenIn == wrenOut)
+                wrenFull = TRUE;
+        
+              if (!wrenBusy)
+                {
+                  post wrenSendTask();
+                  wrenBusy = TRUE;
+                }
+            }
+              else
+            dropBlink();
+            }
+            
+            return ret;
+    
+      }
+
+      task void wrenSendTask() {
+        uint8_t len;
+        uint8_t tmpLen;
+        am_id_t id;
+        am_addr_t addr, src;
+        message_t* msg;
+        am_group_t grp;
+        atomic
+          if (wrenIn == wrenOut && !wrenFull)
+        {
+          wrenBusy = FALSE;
+          return;
+        }
+    
+        msg = wrenQueue[wrenOut];
+        tmpLen = len = call RadioPacket.payloadLength(msg);
+        id = call RadioAMPacket.type(msg);
+        addr = call RadioAMPacket.destination(msg);
+        src = call RadioAMPacket.source(msg);
+        grp = call RadioAMPacket.group(msg);
+        call UartPacket.clear(msg);
+        call UartAMPacket.setSource(msg, src);
+        call UartAMPacket.setGroup(msg, grp);
+    
+        if (call WRENSerialSend.send(addr, wrenQueue[wrenOut], len) == SUCCESS)
+          call Leds.led1Toggle();
+        else
+          {
+        failBlink();
+        post wrenSendTask();
+          }
+      }
+
+    event void WRENSerialSend.sendDone(message_t* msg, error_t error) {
+        if (error != SUCCESS)
+          failBlink();
+        else
+          atomic
+        if (msg == wrenQueue[wrenOut])
+          {
+            if (++wrenOut >= WREN_QUEUE_LEN)
+              wrenOut = 0;
+            if (wrenFull)
+              wrenFull = FALSE;
+          }
+        post wrenSendTask();
+    }
+
      event message_t * BaseCMDReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
@@ -919,6 +1055,15 @@ implementation {
                                 void *payload,
                                 uint8_t len) {
 
+        #ifdef MOTE_DEBUG_MESSAGE
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("crr:0");
+                call DiagMsg.send();
+            }
+        #endif
+
         if (call RadioAMPacket.isForMe(msg)) {
             if (len != sizeof(wren_connection_msg_t)) {
                 call Leds.led0Toggle();
@@ -928,43 +1073,70 @@ implementation {
                 wren_connection_msg_t* rkcm = (wren_connection_msg_t*)call RadioPacket.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
                 wren_connection_msg_t* rcm = (wren_connection_msg_t*)payload;
                 
-                rkcm->src   = rcm->src;
-                
-                connectionClient = rcm->src;
-                
-                rkcm->cmd   = rcm->cmd;
-                rkcm->dst   = rcm->dst;
-                rkcm->logsize = rcm->logsize;
-                rkcm->reset = rcm->reset;
-                
-                currentClientLogSize = rkcm->logsize;
-                //lastReceivedFrameNo = rkcm->logsize;
-                
-                recordCount = 0; // This line is important that it is going to reset the sliding window
-                ackseqno = 0;
-                
-//                if (rkcm->logsize > 0)
-//                    lastAcceptableFrameNo = rkcm->logsize - 1;
-//                else
-//                    lastAcceptableFrameNo = rkcm->logsize;
-                    
-                rkcm->channel = rcm->channel;
-                rkcm->isAcked = 1;
 
-                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+                #ifdef MOTE_DEBUG_MESSAGE
                 
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("crr:0");
+                        call DiagMsg.str("crr:1");
                         call DiagMsg.uint16(rkcm->src);
+                        call DiagMsg.uint8(rcm->close);
+                        call DiagMsg.uint8(serialconnectionlocked);
                         call DiagMsg.send();
                     }
                 #endif
                 
-                post sendConnection();
+                if (rcm->close == 1) {
+	                call AckTimer.stop();
+                    
+	                if(!serialconnectionlocked) {
+	               #ifdef MOTE_DEBUG_MESSAGES
+	                
+	                    if (call DiagMsg.record())
+	                    {
+	                        call DiagMsg.str("crr:2");
+	                        call DiagMsg.send();
+	                    }
+	                #endif
+                        if (call SerialConnectionSend.send(AM_BROADCAST_ADDR, msg, sizeof(wren_connection_msg_t)) == SUCCESS) {
+                            serialconnectionlocked = TRUE;
+                        }
+                    }
+                }
+                else {
+
+	                rkcm->src   = rcm->src;
+	                
+	                connectionClient = rcm->src;
+	                
+	                rkcm->cmd   = rcm->cmd;
+	                rkcm->dst   = rcm->dst;
+	                rkcm->logsize = rcm->logsize;
+	                rkcm->reset = rcm->reset;
+	                
+	                currentClientLogSize = rkcm->logsize;
+	                //lastReceivedFrameNo = rkcm->logsize;
+	                
+	                recordCount = 0; // This line is important that it is going to reset the sliding window
+	                ackseqno = 0;
+	                
+	//                if (rkcm->logsize > 0)
+	//                    lastAcceptableFrameNo = rkcm->logsize - 1;
+	//                else
+	//                    lastAcceptableFrameNo = rkcm->logsize;
+	                    
+	                rkcm->channel = rcm->channel;
+	                rkcm->isAcked = 1;
+                    
+	                post sendConnection();
+                }
             }
         }
         return msg;
+    }
+
+    event void SerialConnectionSend.sendDone(message_t* msg, error_t err) {
+        serialconnectionlocked = FALSE;
     }
 
     task void sendConnection()

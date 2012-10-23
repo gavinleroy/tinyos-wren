@@ -74,11 +74,15 @@ implementation {
   App.RssiLogReceive   -> TimeSyncMessageC.Receive[AM_RSSI_SERIAL_MSG];
   App.CMDSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CMD_MSG];
   
-  App.ConnectionReceive       -> TimeSyncMessageC.Receive[AM_HANDSHAKE_MSG];
-  App.ConnectionSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_HANDSHAKE_MSG];
+  App.ConnectionReceive       -> TimeSyncMessageC.Receive[AM_CONNECTION_MSG];
+  App.ConnectionSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CONNECTION_MSG];
+  App.SerialConnectionSend    -> SAM.AMSend[AM_CONNECTION_MSG];
   
   App.BaseCMDReceive   -> TimeSyncMessageC.Receive[AM_BASE_MSG];
   App.BaseStatusSend   -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
+
+  App.WRENReceive      -> TimeSyncMessageC.Receive[AM_WREN_STATUS_MSG];
+  App.WRENSerialSend   -> SAM.AMSend[AM_WREN_STATUS_MSG];
 
   App.AckSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_SWP_MSG];
 

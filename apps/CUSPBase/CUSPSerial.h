@@ -51,6 +51,7 @@ typedef nx_struct wren_status_msg {
     nx_uint16_t src;
     nx_uint8_t sensing;
     nx_uint32_t buffersize;
+    nx_uint8_t download;
 } wren_status_msg_t;
 
 typedef nx_struct wren_connection_msg {
@@ -61,6 +62,7 @@ typedef nx_struct wren_connection_msg {
     nx_uint8_t channel;
     nx_uint8_t isAcked;
     nx_uint8_t reset;
+    nx_uint8_t close;
 } wren_connection_msg_t;
 
 typedef nx_struct wren_ack_msg {
@@ -85,7 +87,7 @@ enum {
   AM_BASE_STATUS_MSG = 0x8,
   AM_WREN_STATUS_MSG = 0x70,
   AM_BASE_MSG = 0x60,
-  AM_HANDSHAKE_MSG = 0x50,
+  AM_CONNECTION_MSG = 0x50,
   AM_SWP_MSG = 0x40,
 };
 
