@@ -55,7 +55,7 @@ CFLAGS += -DBAT_LOW_INTERVAL=1000
 #==== Sliding Window Protocol ===
 CFLAGS += -DWINDOWSIZE=50
 CFLAGS += -DTIMEOUT=200
-CFLAGS += -DACK_INTERVAL=500
+CFLAGS += -DACK_INTERVAL=1000
 CFLAGS += -DACK_ATTEMPT=50
 #================================
 

@@ -832,8 +832,8 @@ implementation {
             // call WRENStatusTimer.startPeriodic(STATUS_INTERVAL);
 
             // WE are done. Close the connection now.
-            //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
-            post sendConnection();
+            call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+            // post sendConnection();
 
             
             

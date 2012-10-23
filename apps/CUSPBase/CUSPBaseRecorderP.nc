@@ -98,6 +98,7 @@ implementation {
           UART_QUEUE_LEN = WINDOWSIZE,
           WREN_QUEUE_LEN = 12,
           RADIO_QUEUE_LEN = 12,
+          CONNECTION_QUEUE_LEN = 2,
         };
       
     typedef nx_struct logentry_t {
@@ -126,6 +127,11 @@ implementation {
       message_t  * ONE_NOK wrenQueue[WREN_QUEUE_LEN];
       uint8_t    wrenIn, wrenOut;
       bool       wrenBusy, wrenFull;
+
+      message_t  conQueueBufs[CONNECTION_QUEUE_LEN];
+      message_t  * ONE_NOK conQueue[CONNECTION_QUEUE_LEN];
+      uint8_t    conIn, conOut;
+      bool       conBusy, conFull;
 
     bool m_busy = TRUE;
     logentry_t m_entry;
@@ -180,6 +186,7 @@ implementation {
     task void sendAck();
     task void wrenSendTask();
     task void stopAckTimer();
+    task void conSendTask();
     
     uint8_t getIndexFromLastFrameReceived(uint32_t frameno);
     uint32_t findFrameIndex(uint32_t frameno);
@@ -230,6 +237,12 @@ implementation {
         wrenIn = wrenOut = 0;
         wrenBusy = FALSE;
         wrenFull = TRUE;
+
+        for (i = 0; i < CONNECTION_QUEUE_LEN; i++)
+          conQueue[i] = &conQueueBufs[i];
+        conIn = conOut = 0;
+        conBusy = FALSE;
+        conFull = TRUE;
 
         if (call RadioControl.start() == EALREADY)
           radioFull = FALSE;
@@ -676,6 +689,10 @@ implementation {
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
             if (call AckSend.send(ackDst, &swppacket, sizeof(wren_ack_msg_t), time) == SUCCESS) {
                 acklocked = TRUE;
+            } else {
+		        acklocked = FALSE;
+                post sendAck();
+            
             }
         }
     }
@@ -691,11 +708,22 @@ implementation {
         #endif
         acklocked = FALSE;
         
+        /*
         if (ackAttempt == 0 && lastUartedFrameNo > 0) {
           // In case ack packet gets lost
           call AckTimer.startPeriodic(ACK_INTERVAL);
         }
-        
+        */
+
+        if (err != SUCCESS) {
+          post sendAck();
+        }
+        else {
+	        if (ackAttempt == 0 && lastUartedFrameNo > 0) {
+	          // In case ack packet gets lost
+	          call AckTimer.startPeriodic(ACK_INTERVAL);
+	        }
+        }
       // need to see if we can uart data
       //if (lastReceivedFrameNo < lastUartedFrameNo) {
       //  uartOut = lastUartedFrameIndex + 1;
@@ -1054,6 +1082,7 @@ implementation {
      event message_t * ConnectionReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
+        message_t *ret = msg;
 
         #ifdef MOTE_DEBUG_MESSAGE
         
@@ -1067,7 +1096,7 @@ implementation {
         if (call RadioAMPacket.isForMe(msg)) {
             if (len != sizeof(wren_connection_msg_t)) {
                 call Leds.led0Toggle();
-                return msg;
+                return ret;
             }
             else {
                 wren_connection_msg_t* rkcm = (wren_connection_msg_t*)call RadioPacket.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
@@ -1087,8 +1116,30 @@ implementation {
                 #endif
                 
                 if (rcm->close == 1) {
-	                call AckTimer.stop();
+                    call AckTimer.stop();
                     
+		            atomic {
+		              if (!conFull)
+		            {
+		              ret = conQueue[conIn];
+		              conQueue[conIn] = msg;
+		        
+		              conIn = (conIn + 1) % CONNECTION_QUEUE_LEN;
+		            
+		              if (conIn == conOut)
+		                conFull = TRUE;
+		        
+		              if (!conBusy)
+		                {
+		                  post conSendTask();
+		                  conBusy = TRUE;
+		                }
+		            }
+		              else
+		            dropBlink();
+		            }
+
+/*
 	                if(!serialconnectionlocked) {
 	               #ifdef MOTE_DEBUG_MESSAGES
 	                
@@ -1102,6 +1153,7 @@ implementation {
                             serialconnectionlocked = TRUE;
                         }
                     }
+*/
                 }
                 else {
 
@@ -1132,11 +1184,57 @@ implementation {
                 }
             }
         }
-        return msg;
+        return ret;
     }
 
+      task void conSendTask() {
+        uint8_t len;
+        uint8_t tmpLen;
+        am_id_t id;
+        am_addr_t addr, src;
+        message_t* msg;
+        am_group_t grp;
+        atomic
+          if (conIn == conOut && !conFull)
+        {
+          conBusy = FALSE;
+          return;
+        }
+    
+        msg = conQueue[conOut];
+        tmpLen = len = call RadioPacket.payloadLength(msg);
+        id = call RadioAMPacket.type(msg);
+        addr = call RadioAMPacket.destination(msg);
+        src = call RadioAMPacket.source(msg);
+        grp = call RadioAMPacket.group(msg);
+        call UartPacket.clear(msg);
+        call UartAMPacket.setSource(msg, src);
+        call UartAMPacket.setGroup(msg, grp);
+    
+        if (call SerialConnectionSend.send(addr, conQueue[conOut], len) == SUCCESS)
+          call Leds.led1Toggle();
+        else
+          {
+        failBlink();
+        post conSendTask();
+          }
+      }
+
     event void SerialConnectionSend.sendDone(message_t* msg, error_t err) {
-        serialconnectionlocked = FALSE;
+        //serialconnectionlocked = FALSE;
+
+        if (err != SUCCESS)
+          failBlink();
+        else
+          atomic
+        if (msg == conQueue[conOut])
+          {
+            if (++conOut >= CONNECTION_QUEUE_LEN)
+              conOut = 0;
+            if (conFull)
+              conFull = FALSE;
+          }
+        post conSendTask();
     }
 
     task void sendConnection()
