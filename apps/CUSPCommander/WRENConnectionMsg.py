@@ -10,7 +10,7 @@ import tinyos.message.Message
 DEFAULT_MESSAGE_SIZE = 14
 
 # The Active Message type associated with this message.
-AM_TYPE = -1
+AM_TYPE = 80
 
 class WRENConnectionMsg(tinyos.message.Message.Message):
     # Create a new WRENConnectionMsg of size 14.

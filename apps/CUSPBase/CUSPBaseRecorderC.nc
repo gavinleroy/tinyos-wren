@@ -51,6 +51,7 @@ implementation {
   components new TimerMilliC() as AckTimer;
 
   components SerialActiveMessageC as SAM;
+  components new SerialAMSenderC(AM_CLOSE_MSG);
   components CC2420ActiveMessageC;
   components CC2420ControlC;
   
@@ -76,7 +77,6 @@ implementation {
   
   App.ConnectionReceive       -> TimeSyncMessageC.Receive[AM_CONNECTION_MSG];
   App.ConnectionSend          -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_CONNECTION_MSG];
-  App.SerialConnectionSend    -> SAM.AMSend[AM_CONNECTION_MSG];
   
   App.BaseCMDReceive   -> TimeSyncMessageC.Receive[AM_BASE_MSG];
   App.BaseStatusSend   -> TimeSyncMessageC.TimeSyncAMSendMilli[AM_BASE_STATUS_MSG];
@@ -90,6 +90,8 @@ implementation {
   App.SerialControl    -> SAM;
   App.SerialBaseStatusSend -> SAM.AMSend[AM_BASE_STATUS_MSG];
   App.SerialReceive    -> SAM.Receive[AM_CMD_SERIAL_MSG];
+//  App.SerialCloseSend  -> SAM.AMSend[AM_CLOSE_MSG];
+  App.SerialCloseSend  -> SerialAMSenderC;
   App.UartPacket       -> SAM;
   App.UartAMPacket     -> SAM;  
   //App.Snoop -> ActiveMessageC.Snoop;

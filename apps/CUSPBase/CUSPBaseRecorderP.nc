@@ -53,7 +53,7 @@ module CUSPBaseRecorderP {
 
         interface TimeSyncAMSend<TMilli,uint32_t> as ConnectionSend;
         interface Receive as ConnectionReceive; // cmd receive
-        interface AMSend as SerialConnectionSend; //base serial status send
+        interface AMSend as SerialCloseSend; 
 
         interface TimeSyncAMSend<TMilli,uint32_t> as AckSend;
 
@@ -128,11 +128,6 @@ implementation {
       uint8_t    wrenIn, wrenOut;
       bool       wrenBusy, wrenFull;
 
-      message_t  conQueueBufs[CONNECTION_QUEUE_LEN];
-      message_t  * ONE_NOK conQueue[CONNECTION_QUEUE_LEN];
-      uint8_t    conIn, conOut;
-      bool       conBusy, conFull;
-
     bool m_busy = TRUE;
     logentry_t m_entry;
 
@@ -142,6 +137,7 @@ implementation {
     message_t rssipacket;
     message_t cmdpacket;
     message_t connectionpacket;
+    message_t serialclosepacket;
     message_t swppacket;
 
     bool statuslocked = FALSE;
@@ -149,7 +145,7 @@ implementation {
     bool amsendlocked = FALSE;
     bool basestatuslocked = FALSE;
     bool connectionlocked = FALSE;
-    bool serialconnectionlocked = FALSE;
+    bool serialcloselocked = FALSE;
     bool acklocked = FALSE;
 
     uint16_t currentCMD;
@@ -175,6 +171,7 @@ implementation {
     
     uint8_t ackAttempt;
     uint16_t connectionClient;
+    uint8_t downloadDone;
     
     FrameItem frameTable[UART_QUEUE_LEN];
 
@@ -186,7 +183,7 @@ implementation {
     task void sendAck();
     task void wrenSendTask();
     task void stopAckTimer();
-    task void conSendTask();
+    task void closeConnection();
     
     uint8_t getIndexFromLastFrameReceived(uint32_t frameno);
     uint32_t findFrameIndex(uint32_t frameno);
@@ -238,12 +235,6 @@ implementation {
         wrenBusy = FALSE;
         wrenFull = TRUE;
 
-        for (i = 0; i < CONNECTION_QUEUE_LEN; i++)
-          conQueue[i] = &conQueueBufs[i];
-        conIn = conOut = 0;
-        conBusy = FALSE;
-        conFull = TRUE;
-
         if (call RadioControl.start() == EALREADY)
           radioFull = FALSE;
         if (call SerialControl.start() == EALREADY)
@@ -263,6 +254,7 @@ implementation {
         
         ackseqno = 0;
         ackAttempt = 0;
+        downloadDone = 0;
         
     }
 
@@ -302,7 +294,7 @@ implementation {
             post sendAck();
         }
         else {
-	        if (ackAttempt <= ACK_ATTEMPT) {
+	        if (ackAttempt <= ACK_ATTEMPT && !downloadDone) {
 	            post sendAck();
 	            ackAttempt++;
 	        } else {
@@ -528,6 +520,9 @@ implementation {
 				  // now adjust the sfr and others using the current received data
 	              adjustLastReceivedFrame(rssim->size, uartIn);
 	              
+	              if (rssim->size == 0) {
+	                downloadDone = 1;
+	              }
                   // send ack for reception
                   ackDst = rssim->dst;
                   post sendAck();
@@ -719,7 +714,7 @@ implementation {
           post sendAck();
         }
         else {
-	        if (ackAttempt == 0 && lastUartedFrameNo > 0) {
+	        if (ackAttempt == 0 && lastUartedFrameNo > 1) {
 	          // In case ack packet gets lost
 	          call AckTimer.startPeriodic(ACK_INTERVAL);
 	        }
@@ -806,9 +801,10 @@ implementation {
         {
             case CMD_DOWNLOAD:
                recordCount = 0;
-		       ackAttempt == 0;
+		       ackAttempt = 0;
+		       downloadDone = 0;
 	          // In case ack packet gets lost
-	          call AckTimer.startPeriodic(ACK_INTERVAL);
+	          // call AckTimer.startPeriodic(ACK_INTERVAL);
                
                /*
                call LowPowerListening.setRemoteWakeupInterval(&cmdpacket, REMOTE_WAKEUP_INTERVAL);
@@ -1084,157 +1080,152 @@ implementation {
                                 uint8_t len) {
         message_t *ret = msg;
 
-        #ifdef MOTE_DEBUG_MESSAGE
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
         
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("crr:0");
+                call DiagMsg.uint8(call CC2420Config.getChannel());
                 call DiagMsg.send();
             }
         #endif
-
-        if (call RadioAMPacket.isForMe(msg)) {
-            if (len != sizeof(wren_connection_msg_t)) {
-                call Leds.led0Toggle();
-                return ret;
+        
+        // call AckTimer.stop();
+//        post stopAckTimer();
+        
+        #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("crr:1");
+                call DiagMsg.send();
             }
-            else {
-                wren_connection_msg_t* rkcm = (wren_connection_msg_t*)call RadioPacket.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
-                wren_connection_msg_t* rcm = (wren_connection_msg_t*)payload;
-                
+        #endif
+        post stopAckTimer();
 
+        atomic {
+        if (len != sizeof(wren_connection_msg_t)) {
+            call Leds.led0Toggle();
+            return ret;
+        }
+        else {
+            wren_connection_msg_t* rkcm = (wren_connection_msg_t*)call RadioPacket.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
+            wren_connection_msg_t* rcm = (wren_connection_msg_t*)payload;
+            
+
+            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+            
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("crr:2");
+                    call DiagMsg.uint16(rkcm->src);
+                    call DiagMsg.uint8(rcm->close);
+                    call DiagMsg.send();
+                }
+            #endif
+
+            rkcm->src   = rcm->src;
+            
+            
+            rkcm->cmd   = rcm->cmd;
+            rkcm->dst   = rcm->dst;
+            rkcm->logsize = rcm->logsize;
+            rkcm->reset = rcm->reset;
+            rkcm->close = rcm->close;
+            
+            //lastReceivedFrameNo = rkcm->logsize;
+            connectionClient = rcm->src;
+            currentClientLogSize = rkcm->logsize;
+            recordCount = 0; // This line is important that it is going to reset the sliding window
+            ackseqno = 0;
+            downloadDone = 0;
+//                if (rkcm->logsize > 0)
+//                    lastAcceptableFrameNo = rkcm->logsize - 1;
+//                else
+//                    lastAcceptableFrameNo = rkcm->logsize;
+                
+            rkcm->channel = rcm->channel;
+            rkcm->isAcked = 1;
+
+
+            if (rcm->isAcked == 0 && rcm->close == 1) {
+		        #ifdef MOTE_DEBUG_MESSAGE
+		        
+		            if (call DiagMsg.record())
+		            {
+		                call DiagMsg.str("crr:3");
+		                call DiagMsg.uint8(rcm->isAcked);
+		                call DiagMsg.uint8(rcm->close);
+		                call DiagMsg.send();
+		            }
+		        #endif
+                // we got the close connection ack from the mote
+                post closeConnection();
+                // post sendConnection();
                 #ifdef MOTE_DEBUG_MESSAGE
                 
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("crr:1");
-                        call DiagMsg.uint16(rkcm->src);
+                        call DiagMsg.str("crr:4");
+                        call DiagMsg.uint8(rcm->isAcked);
                         call DiagMsg.uint8(rcm->close);
-                        call DiagMsg.uint8(serialconnectionlocked);
                         call DiagMsg.send();
                     }
                 #endif
-                
-                if (rcm->close == 1) {
-                    call AckTimer.stop();
-                    
-		            atomic {
-		              if (!conFull)
-		            {
-		              ret = conQueue[conIn];
-		              conQueue[conIn] = msg;
-		        
-		              conIn = (conIn + 1) % CONNECTION_QUEUE_LEN;
-		            
-		              if (conIn == conOut)
-		                conFull = TRUE;
-		        
-		              if (!conBusy)
-		                {
-		                  post conSendTask();
-		                  conBusy = TRUE;
-		                }
-		            }
-		              else
-		            dropBlink();
-		            }
-
-/*
-	                if(!serialconnectionlocked) {
-	               #ifdef MOTE_DEBUG_MESSAGES
-	                
-	                    if (call DiagMsg.record())
-	                    {
-	                        call DiagMsg.str("crr:2");
-	                        call DiagMsg.send();
-	                    }
-	                #endif
-                        if (call SerialConnectionSend.send(AM_BROADCAST_ADDR, msg, sizeof(wren_connection_msg_t)) == SUCCESS) {
-                            serialconnectionlocked = TRUE;
-                        }
-                    }
-*/
-                }
-                else {
-
-	                rkcm->src   = rcm->src;
-	                
-	                connectionClient = rcm->src;
-	                
-	                rkcm->cmd   = rcm->cmd;
-	                rkcm->dst   = rcm->dst;
-	                rkcm->logsize = rcm->logsize;
-	                rkcm->reset = rcm->reset;
-	                
-	                currentClientLogSize = rkcm->logsize;
-	                //lastReceivedFrameNo = rkcm->logsize;
-	                
-	                recordCount = 0; // This line is important that it is going to reset the sliding window
-	                ackseqno = 0;
-	                
-	//                if (rkcm->logsize > 0)
-	//                    lastAcceptableFrameNo = rkcm->logsize - 1;
-	//                else
-	//                    lastAcceptableFrameNo = rkcm->logsize;
-	                    
-	                rkcm->channel = rcm->channel;
-	                rkcm->isAcked = 1;
-                    
-	                post sendConnection();
-                }
             }
+            else {
+                post sendConnection();
+            }
+        }
         }
         return ret;
     }
 
-      task void conSendTask() {
-        uint8_t len;
-        uint8_t tmpLen;
-        am_id_t id;
-        am_addr_t addr, src;
-        message_t* msg;
-        am_group_t grp;
-        atomic
-          if (conIn == conOut && !conFull)
-        {
-          conBusy = FALSE;
-          return;
+    task void closeConnection() {
+        wren_close_msg_t* wcm;
+        #ifdef MOTE_DEBUG_MESSAGE
+        
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("clo:0");
+                call DiagMsg.uint8(serialcloselocked);
+                call DiagMsg.send();
+            }
+        #endif
+        if (!serialcloselocked) {
+			wcm = (wren_close_msg_t*)call UartPacket.getPayload(&serialclosepacket, sizeof(wren_close_msg_t));
+	        if (!serialcloselocked) {
+	            
+	            if (wcm == NULL) {
+	                return;
+	            }
+	            wcm->src   = connectionClient;
+	            wcm->close = 1;
+	            
+	        #ifdef MOTE_DEBUG_MESSAGE
+	        
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("clo:1");
+	                call DiagMsg.uint8(serialcloselocked);
+	                call DiagMsg.send();
+	            }
+	        #endif
+		        if (call SerialCloseSend.send(AM_BROADCAST_ADDR, &serialclosepacket, sizeof(wren_close_msg_t)) == SUCCESS) {
+		            serialcloselocked = TRUE;
+		        } else {
+		            serialcloselocked = FALSE;
+		            post closeConnection();
+		        }
+	        }
         }
-    
-        msg = conQueue[conOut];
-        tmpLen = len = call RadioPacket.payloadLength(msg);
-        id = call RadioAMPacket.type(msg);
-        addr = call RadioAMPacket.destination(msg);
-        src = call RadioAMPacket.source(msg);
-        grp = call RadioAMPacket.group(msg);
-        call UartPacket.clear(msg);
-        call UartAMPacket.setSource(msg, src);
-        call UartAMPacket.setGroup(msg, grp);
-    
-        if (call SerialConnectionSend.send(addr, conQueue[conOut], len) == SUCCESS)
-          call Leds.led1Toggle();
-        else
-          {
-        failBlink();
-        post conSendTask();
-          }
-      }
+    }
 
-    event void SerialConnectionSend.sendDone(message_t* msg, error_t err) {
-        //serialconnectionlocked = FALSE;
-
-        if (err != SUCCESS)
-          failBlink();
-        else
-          atomic
-        if (msg == conQueue[conOut])
-          {
-            if (++conOut >= CONNECTION_QUEUE_LEN)
-              conOut = 0;
-            if (conFull)
-              conFull = FALSE;
-          }
-        post conSendTask();
+    event void SerialCloseSend.sendDone(message_t* msg, error_t err) {
+        serialcloselocked = FALSE;
+       if (err != SUCCESS) {
+            post closeConnection();    
+       }
     }
 
     task void sendConnection()
@@ -1249,12 +1240,12 @@ implementation {
             //}
             // rkcm->isAcked = 1;
 
-                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+                #ifdef MOTE_DEBUG_MESSAGE
                 
                     if (call DiagMsg.record())
                     {
-                        call DiagMsg.str("crr:1");
-                        call DiagMsg.uint16(rkcm->src);
+                        call DiagMsg.str("sc:1");
+                        call DiagMsg.uint16(connectionClient);
                         call DiagMsg.send();
                     }
                 #endif
@@ -1269,6 +1260,9 @@ implementation {
 //                if (call ConnectionSend.send(rkcm->src, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
                 if (call ConnectionSend.send(connectionClient, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
                     connectionlocked = TRUE;
+                } else {
+                    connectionlocked = FALSE;
+                    post sendConnection();
                 }
             }
     }
@@ -1283,6 +1277,10 @@ implementation {
             }
         #endif
         connectionlocked = FALSE;
+       if (err != SUCCESS) {
+            post sendConnection();    
+       }
+        
     }
     
     event void CMDSend.sendDone(message_t* msg, error_t err) {

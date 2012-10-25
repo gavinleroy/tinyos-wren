@@ -832,8 +832,8 @@ implementation {
             // call WRENStatusTimer.startPeriodic(STATUS_INTERVAL);
 
             // WE are done. Close the connection now.
-            call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
-            // post sendConnection();
+            //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+            post sendConnection();
 
             
             
@@ -1482,6 +1482,14 @@ implementation {
 //                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
             if (call ConnectionSend.send(currentDST, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
                 connectionlocked = TRUE;
+	        #ifdef MOTE_DEBUG_MESSAGE
+	            if (call DiagMsg.record())
+	            {
+	                call DiagMsg.str("shs:3");
+	                call DiagMsg.uint16(currentDST);
+	                call DiagMsg.send();
+	            }
+	        #endif
             } else {
                 connectionlocked = FALSE;
                 post sendConnection();
@@ -1492,6 +1500,9 @@ implementation {
     event void ConnectionSend.sendDone(message_t* msg, error_t err) {
         connectionlocked = FALSE;
         if (err == SUCCESS) {
+            if (connectionClose == 1) {
+                call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
+            }
         }
         else {
             post sendConnection();
@@ -1554,6 +1565,15 @@ implementation {
             currentCMD = rcm->cmd;
             currentChannel = rcm->channel;        
             currentDST = rcm->dst;
+            
+            if (rcm->close == 1) {
+                // We got ack back from the base station.else 
+                // clean up connection                    
+                connectionClose = 0;
+                call WRENConnectionTimer.stop();     
+                post sendConnection();
+                return msg;           
+            }
             
                 #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 

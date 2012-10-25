@@ -1,7 +1,7 @@
 COMPONENT=CUSPBaseRecorderC
 
-BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENConnectionMsg.py
-CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENConnectionMsg.py
+BUILD_EXTRA_DEPS += CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENConnectionMsg.py WRENCloseMsg.py
+CLEAN_EXTRA = CmdSerialMsg.py RssiSerialMsg.py SerialStatusMsg.py BaseStatusMsg.py WRENStatusMsg.py WRENConnectionMsg.py WRENCloseMsg.py
 
 CmdSerialMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=CmdSerialMsg CUSPSerial.h cmd_serial_msg -o $@
@@ -20,6 +20,9 @@ WRENStatusMsg.py: CUSPSerial.h
 
 WRENConnectionMsg.py: CUSPSerial.h
 	    mig python -target=null $(CFLAGS) -python-classname=WRENConnectionMsg CUSPSerial.h wren_connection_msg -o $@
+
+WRENCloseMsg.py: CUSPSerial.h
+	    mig python -target=null $(CFLAGS) -python-classname=WRENCloseMsg CUSPSerial.h wren_close_msg -o $@
 
 PFLAGS += -DTIMESYNC_RATE=10
 
@@ -55,16 +58,16 @@ CFLAGS += -DBAT_LOW_INTERVAL=1000
 #==== Sliding Window Protocol ===
 CFLAGS += -DWINDOWSIZE=50
 CFLAGS += -DTIMEOUT=200
-CFLAGS += -DACK_INTERVAL=1000
+CFLAGS += -DACK_INTERVAL=250
 CFLAGS += -DACK_ATTEMPT=50
 #================================
 
 # ==== DEBUG PARAMETERS ====== 
 #CFLAGS += -DDIAGMSG_SERIAL_START
-#CFLAGS += -DMOTE_DEBUG
+CFLAGS += -DMOTE_DEBUG
 #CFLAGS += -DMOTE_DEBUG_LOGREAD
 #CFLAGS += -DMOTE_DEBUG_STATUS
-#CFLAGS += -DMOTE_DEBUG_MESSAGE
+CFLAGS += -DMOTE_DEBUG_MESSAGE
 #CFLAGS += -DMOTE_DEBUG_MESSAGE_DETAIL
 #CFLAGS += -DMOTE_DEBUG_QUEUE
 CFLAGS += -DMOTE_DEBUG_MOTECOUNTING

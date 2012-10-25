@@ -65,6 +65,11 @@ typedef nx_struct wren_connection_msg {
     nx_uint8_t close;
 } wren_connection_msg_t;
 
+typedef nx_struct wren_close_msg {
+    nx_uint16_t src;
+    nx_uint8_t close;
+} wren_close_msg_t;
+
 typedef nx_struct wren_ack_msg {
     nx_uint32_t seqno;
     nx_uint32_t ackNumber;
@@ -89,6 +94,7 @@ enum {
   AM_BASE_MSG = 0x60,
   AM_CONNECTION_MSG = 0x50,
   AM_SWP_MSG = 0x40,
+  AM_CLOSE_MSG = 0x30,
 };
 
 enum {
