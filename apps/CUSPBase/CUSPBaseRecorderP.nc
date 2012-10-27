@@ -492,6 +492,7 @@ implementation {
             if (call DiagMsg.record())
             {
                 call DiagMsg.str("rlr:2");
+                call DiagMsg.uint16(rssim->dst);
                 call DiagMsg.uint32(lastUartedFrameNo);
                 call DiagMsg.uint32(lastAcceptableFrameNo);
                 call DiagMsg.uint32(rssim->size);
@@ -1118,7 +1119,7 @@ implementation {
 	                if (call DiagMsg.record())
 	                {
 	                    call DiagMsg.str("crr:2");
-	                    call DiagMsg.uint16(rkcm->src);
+	                    call DiagMsg.uint16(rcm->src);
 	                    call DiagMsg.uint8(rcm->isAcked);
 	                    call DiagMsg.uint8(rcm->action);
 	                    call DiagMsg.send();
@@ -1139,6 +1140,7 @@ implementation {
 	            recordCount = 0; // This line is important that it is going to reset the sliding window
 	            ackseqno = 0;
 	            downloadDone = 0;
+                ackAttempt = 0;
 	//                if (rkcm->logsize > 0)
 	//                    lastAcceptableFrameNo = rkcm->logsize - 1;
 	//                else

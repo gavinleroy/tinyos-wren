@@ -1512,10 +1512,8 @@ implementation {
 	            
 	            if (rcm->isAcked == COM_ACK) {
 	                if (rcm->action == CONNECTION_RESET) {
-	                    atomic {
-	                        connectionAck = COM_NONE;
-	                        connectionAction = CONNECTION_NONE;
-	                    }
+                        connectionAck = COM_NONE;
+                        connectionAction = CONNECTION_NONE;
 	                    post radioSendTask();    
 	                } else {
 	                    post startDownload();
@@ -1523,6 +1521,10 @@ implementation {
 	            }
 	            else {
 	                // change back to normal channel 11 or random backoff and try again
+                    connectionAck = COM_ACK;
+                    connectionAction = CONNECTION_OPEN;
+                    post sendConnection();
+	                
 	            }
             }
         }
@@ -1608,6 +1610,9 @@ implementation {
             if (connectionAction == CONNECTION_CLOSE) {
                 //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
             }
+            
+            call Packet.clear(&connectionpacket);
+            
         }
         else {
             post sendConnection();

@@ -96,7 +96,7 @@ class CmdCenter:
 #        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
         self.wrenConnectionTimer = ResettableTimer(2, self.printConnection)
-        self.downloadTimer = ResettableTimer(2, self.downloadData)
+        self.downloadTimer = ResettableTimer(3, self.downloadData)
 
         self.logger = Logger(basedir+"/download_log_stat.txt")
         
