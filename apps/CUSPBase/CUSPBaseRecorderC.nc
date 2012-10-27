@@ -49,6 +49,7 @@ implementation {
   components new TimerMilliC() as Timer0;
   components new TimerMilliC() as RandomTimer2;
   components new TimerMilliC() as AckTimer;
+  components new TimerMilliC() as ConnectionTimer;
 
   components SerialActiveMessageC as SAM;
   components new SerialAMSenderC(AM_CLOSE_MSG);
@@ -99,6 +100,7 @@ implementation {
   App.Timer0         -> Timer0;
   App.RandomTimer2   -> RandomTimer2;
   App.AckTimer   -> AckTimer;
+  App.ConnectionTimer   -> ConnectionTimer;
 
   components RandomC;
   App.Random -> RandomC;

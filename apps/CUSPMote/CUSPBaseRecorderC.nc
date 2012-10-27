@@ -59,7 +59,7 @@ implementation {
   components new TimerMilliC() as BatteryTimer;
   components new TimerMilliC() as DownloadTimer;
   components new TimerMilliC() as WRENStatusTimer;
-  components new TimerMilliC() as WRENConnectionTimer;
+  components new TimerMilliC() as ConnectionTimer;
   components new TimerMilliC() as AckTimer;
   components new TimerMilliC() as TransmitTimer;
   components new TimerMilliC() as ReTransmitTimer;
@@ -123,7 +123,7 @@ implementation {
   App.BatteryTimer   -> BatteryTimer;
   App.DownloadTimer  -> DownloadTimer;
   App.WRENStatusTimer -> WRENStatusTimer;
-  App.WRENConnectionTimer -> WRENConnectionTimer;
+  App.ConnectionTimer -> ConnectionTimer;
   App.AckTimer -> AckTimer;
   App.TransmitTimer -> TransmitTimer;
   App.ReTransmitTimer -> ReTransmitTimer;

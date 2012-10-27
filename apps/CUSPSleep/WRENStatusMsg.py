@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 7
+DEFAULT_MESSAGE_SIZE = 8
 
 # The Active Message type associated with this message.
 AM_TYPE = 112
 
 class WRENStatusMsg(tinyos.message.Message.Message):
-    # Create a new WRENStatusMsg of size 7.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=7):
+    # Create a new WRENStatusMsg of size 8.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=8):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -40,6 +40,10 @@ class WRENStatusMsg(tinyos.message.Message.Message):
             pass
         try:
             s += "  [buffersize=0x%x]\n" % (self.get_buffersize())
+        except:
+            pass
+        try:
+            s += "  [download=0x%x]\n" % (self.get_download())
         except:
             pass
         return s
@@ -210,4 +214,59 @@ class WRENStatusMsg(tinyos.message.Message.Message):
     #
     def sizeBits_buffersize(self):
         return 32
+    
+    #
+    # Accessor methods for field: download
+    #   Field type: short
+    #   Offset (bits): 56
+    #   Size (bits): 8
+    #
+
+    #
+    # Return whether the field 'download' is signed (False).
+    #
+    def isSigned_download(self):
+        return False
+    
+    #
+    # Return whether the field 'download' is an array (False).
+    #
+    def isArray_download(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'download'
+    #
+    def offset_download(self):
+        return (56 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'download'
+    #
+    def offsetBits_download(self):
+        return 56
+    
+    #
+    # Return the value (as a short) of the field 'download'
+    #
+    def get_download(self):
+        return self.getUIntElement(self.offsetBits_download(), 8, 1)
+    
+    #
+    # Set the value of the field 'download'
+    #
+    def set_download(self, value):
+        self.setUIntElement(self.offsetBits_download(), 8, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'download'
+    #
+    def size_download(self):
+        return (8 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'download'
+    #
+    def sizeBits_download(self):
+        return 8
     

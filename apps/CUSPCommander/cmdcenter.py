@@ -362,6 +362,7 @@ class CmdCenter:
                     self.startNextDownload(baseid)
                 else:
                     self.checkCurrentDownload(baseid, nodeid) #check to see if the download is still in progress
+
             self.isBusy = False    
         self.downloadTimer.reset()
                 
@@ -385,6 +386,7 @@ class CmdCenter:
         #            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                 self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                 #self.downloadTimer.reset()
+                #time.sleep(1)
             else:
                 self.printWrite("download start: %s, channel: %s, nodeid: %s\n"%(time.ctime(), channel, nodeid))
                 self.printFlush()
@@ -425,6 +427,7 @@ class CmdCenter:
                     #self.resetDownloadTimer()
                     #self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                     self.mif[baseid].sendMsg(self.tos_source[baseid], baseid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                    #time.sleep(1)
                     #self.mif[baseid].sendMsg(self.tos_source[baseid], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
                     #self.mif[baseid].sendMsg(self.tos_source[baseid], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                     #self.downloadTimer.reset()
@@ -453,6 +456,7 @@ class CmdCenter:
         self.printFlush()
         if self.downloadMode == DOWNLOAD_ALL:
             self.downloadData()
+        self.downloadTimer.reset()
 
     def clearDownloadAll(self):
         print "clear mapping..."

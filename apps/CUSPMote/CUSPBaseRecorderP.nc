@@ -78,7 +78,7 @@ module CUSPBaseRecorderP {
         interface Timer<TMilli> as DownloadTimer;
         interface Timer<TMilli> as StatusRandomTimer;
         interface Timer<TMilli> as WRENStatusTimer;
-        interface Timer<TMilli> as WRENConnectionTimer;
+        interface Timer<TMilli> as ConnectionTimer;
         interface Timer<TMilli> as AckTimer;
         interface Timer<TMilli> as TransmitTimer;
         interface Timer<TMilli> as ReTransmitTimer;
@@ -544,13 +544,13 @@ implementation {
         post sendWRENStatus();
     }
 
-    event void WRENConnectionTimer.fired() {
+    event void ConnectionTimer.fired() {
 		if (connectionAttempt < CONNECTION_ATTEMPT) {
 		    connectionAttempt++;
         	post sendConnection();
         } else {
 			// give up now after # of trials        	
-        	call WRENConnectionTimer.stop();
+        	call ConnectionTimer.stop();
         }
     }
 
@@ -833,7 +833,7 @@ implementation {
 	            // call WRENStatusTimer.startPeriodic(STATUS_INTERVAL);
 	
 	            // WE are done. Close the connection now.
-	            //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+	            //call ConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
 	            connectionAck = COM_NONE;
 	            connectionAction = CONNECTION_CLOSE;
 	            post sendConnection();
@@ -1274,7 +1274,7 @@ implementation {
         switch(currentCMD)
         {
             case CMD_DOWNLOAD:
-                //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+                //call ConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
 				connectionAck = COM_NONE;
 				connectionAction = CONNECTION_OPEN;
                 
@@ -1468,7 +1468,7 @@ implementation {
         }
         else {
             // stop the connection timer 
-            call WRENConnectionTimer.stop();
+            call ConnectionTimer.stop();
 
             #ifdef MOTE_DEBUG_MESSAGE_DETAIL
                 if (call DiagMsg.record())
@@ -1608,7 +1608,7 @@ implementation {
         connectionlocked = FALSE;
         if (err == SUCCESS) {
             if (connectionAction == CONNECTION_CLOSE) {
-                //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
+                //call ConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
             }
             
             call Packet.clear(&connectionpacket);

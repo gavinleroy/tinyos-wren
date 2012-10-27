@@ -72,6 +72,7 @@ module CUSPBaseRecorderP {
         interface Timer<TMilli> as Timer0;
         interface Timer<TMilli> as RandomTimer2;
         interface Timer<TMilli> as AckTimer;
+        interface Timer<TMilli> as ConnectionTimer;
         interface Random;
 
         interface LowPowerListening;
@@ -172,6 +173,8 @@ implementation {
     uint8_t ackAttempt;
     uint16_t connectionClient;
     uint8_t downloadDone;
+
+    uint8_t connectionAttempt;
     
     FrameItem frameTable[UART_QUEUE_LEN];
 
@@ -192,7 +195,8 @@ implementation {
 	uint32_t slideUpWindows(uint32_t input);
     void adjustLastReceivedFrame(uint32_t frameno, uint8_t idx);
     void adjustAcceptableSlidingWindows(uint32_t frameno, uint8_t idx);
-
+    void initializeDownload();
+    
     void clearFrameTable()
     {
         int8_t i;
@@ -255,6 +259,8 @@ implementation {
         ackseqno = 0;
         ackAttempt = 0;
         downloadDone = 0;
+
+        connectionAttempt = 0;
         
     }
 
@@ -288,6 +294,20 @@ implementation {
     event void SerialControl.stopDone(error_t err) {
     }
 
+    event void ConnectionTimer.fired() {
+        if (connectionAttempt < CONNECTION_ATTEMPT) {
+            connectionAttempt++;
+            post sendConnection();
+        } else {
+            // give up now after # of trials            
+            call ConnectionTimer.stop();
+            // what to do now after we don't get data with # of ack attempts
+            // maybe move on??
+            // close connection and start a new download
+            post closeConnection();
+        }
+    }
+
     event void AckTimer.fired() {
         
         if (ACK_ATTEMPT == 0) {
@@ -300,6 +320,10 @@ implementation {
 	        } else {
 	            ackAttempt = 0;
 	            call AckTimer.stop();
+	            // what to do now after we don't get data with # of ack attempts
+	            // maybe move on??
+	            // close connection and start a new download
+                post closeConnection();
 	        }
         }
     }
@@ -448,6 +472,7 @@ implementation {
             // We need to set default values when the download starts.
 			// Somehow the connection is established, the numbers delivered don't match our first data arrived here.
             if (recordCount == 1) {
+	            call ConnectionTimer.stop();
                 
                 // We have size that starts the largest and decrement by one from there, give 1 pad
                 //lastReceivedFrameNo = rssim->size + 1;
@@ -516,7 +541,7 @@ implementation {
 		          frameTable[uartIn].timeout = 0;
 	              frameTable[uartIn].index = uartIn;
 	
-	              printFrameTable(uartIn);
+	              //printFrameTable(uartIn);
 
 				  // now adjust the sfr and others using the current received data
 	              adjustLastReceivedFrame(rssim->size, uartIn);
@@ -804,6 +829,8 @@ implementation {
                recordCount = 0;
 		       ackAttempt = 0;
 		       downloadDone = 0;
+		       connectionAttempt = 0;
+		       
 	          // In case ack packet gets lost
 	          // call AckTimer.startPeriodic(ACK_INTERVAL);
                
@@ -1076,6 +1103,20 @@ implementation {
         return msg;
     }
 
+    void initializeDownload(){
+        lastReceivedFrameNo = 0;
+        lastUartedFrameNo = 0;
+        lastAcceptableFrameNo = 0;
+        recordCount = 0;
+
+        ackseqno = 0;
+        downloadDone = 0;
+        ackAttempt = 0;
+        connectionAttempt = 0;
+        
+        clearFrameTable();
+    }
+    
      event message_t * ConnectionReceive.receive(message_t *msg,
                                 void *payload,
                                 uint8_t len) {
@@ -1102,6 +1143,7 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
+        call ConnectionTimer.stop();
         post stopAckTimer();
 
         if (len != sizeof(wren_connection_msg_t)) {
@@ -1137,10 +1179,10 @@ implementation {
 	            //lastReceivedFrameNo = rkcm->logsize;
 	            connectionClient = rcm->src;
 	            currentClientLogSize = rkcm->logsize;
-	            recordCount = 0; // This line is important that it is going to reset the sliding window
-	            ackseqno = 0;
-	            downloadDone = 0;
-                ackAttempt = 0;
+
+                // Initialize all variables and buffers
+                initializeDownload();
+                
 	//                if (rkcm->logsize > 0)
 	//                    lastAcceptableFrameNo = rkcm->logsize - 1;
 	//                else
@@ -1288,7 +1330,8 @@ implementation {
             post sendConnection();    
        }
        else {
-           call RadioPacket.clear(&connectionpacket);
+           call ConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
+           //call RadioPacket.clear(&connectionpacket);
        }
         
     }
