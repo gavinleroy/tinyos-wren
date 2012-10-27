@@ -96,7 +96,7 @@ class CmdCenter:
 #        self.wrenTimer = ResettableTimer(2, self.printWRENStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
         self.wrenConnectionTimer = ResettableTimer(2, self.printConnection)
-        self.downloadTimer = ResettableTimer(3, self.downloadData)
+        self.downloadTimer = ResettableTimer(4, self.downloadData)
 
         self.logger = Logger(basedir+"/download_log_stat.txt")
         
@@ -160,7 +160,7 @@ class CmdCenter:
                 
                 self.logSize[m.get_dst()] = m.get_size()
 
-                if (self.dl%500) == 0:
+                if (self.dl%200) == 0:
                     sys.stdout.write(".")
                     sys.stdout.flush()
                 self.dl += 1
@@ -364,7 +364,9 @@ class CmdCenter:
                     self.checkCurrentDownload(baseid, nodeid) #check to see if the download is still in progress
 
             self.isBusy = False    
-        self.downloadTimer.reset()
+        
+        with self.lock:
+            self.downloadTimer.reset()
                 
     def downloadCommandController(self, channel, nodeid):
         #self.resetDownloadTimer()
@@ -387,10 +389,13 @@ class CmdCenter:
                 self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                 #self.downloadTimer.reset()
                 #time.sleep(1)
+                #self.downloadTimer.reset()
             else:
                 self.printWrite("download start: %s, channel: %s, nodeid: %s\n"%(time.ctime(), channel, nodeid))
                 self.printFlush()
                 self.resetDownloadMaxTry(nodeid)
+                #time.sleep(1)
+                #self.downloadTimer.reset()
                 return
             
             self.downloadMaxTry[nodeid] += 1
@@ -398,7 +403,6 @@ class CmdCenter:
             self.resetDownloadMaxTry(nodeid)
             self.startNextDownload(channel)
 
-        self.downloadTimer.reset()
             #self.basestations[channel] = 0
                 #self.downloadCommandController(channel, nodeid)
 
@@ -424,28 +428,30 @@ class CmdCenter:
                 #self.mif[baseid].sendMsg(self.tos_source[baseid], baseid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             else:
                 if self.moteLogSize[nodeid] == self.logSize[nodeid]: # this means still downloading...
-                    #self.resetDownloadTimer()
-                    #self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                    self.mif[baseid].sendMsg(self.tos_source[baseid], baseid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                    #time.sleep(1)
-                    #self.mif[baseid].sendMsg(self.tos_source[baseid], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                    #self.mif[baseid].sendMsg(self.tos_source[baseid], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                    #self.downloadTimer.reset()
                     if self.downloadMaxRetry[nodeid] > 5:
                         self.printWrite("download stop: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
                         self.printFlush()
                         self.resetDownloadMaxReTry(nodeid)
                         self.startNextDownload(baseid)
                         return
+                    else:
+                        #self.resetDownloadTimer()
+                        #self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        self.mif[baseid].sendMsg(self.tos_source[baseid], baseid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        #self.downloadTimer.reset()
+                        #time.sleep(1)
+                        #self.mif[baseid].sendMsg(self.tos_source[baseid], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        #self.mif[baseid].sendMsg(self.tos_source[baseid], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+                        #self.downloadTimer.reset()
                 else:
                     self.moteLogSize[nodeid] = self.logSize[nodeid]
                     self.printWrite("download restart: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
                     self.printFlush()
                     self.resetDownloadMaxReTry(nodeid)
+                    #self.downloadTimer.reset()
                     return
             
             self.downloadMaxRetry[nodeid] += 1
-            self.downloadTimer.reset()
 
         #time.sleep(1)
 
@@ -454,9 +460,11 @@ class CmdCenter:
         self.basestations[baseid] = 0
         self.printWrite("download end: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
         self.printFlush()
+        with self.lock:
+            self.downloadTimer.reset()
+
         if self.downloadMode == DOWNLOAD_ALL:
             self.downloadData()
-        self.downloadTimer.reset()
 
     def clearDownloadAll(self):
         print "clear mapping..."
