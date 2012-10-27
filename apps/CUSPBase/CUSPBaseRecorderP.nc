@@ -1103,80 +1103,81 @@ implementation {
         #endif
         post stopAckTimer();
 
-        atomic {
         if (len != sizeof(wren_connection_msg_t)) {
             call Leds.led0Toggle();
             return ret;
         }
         else {
-            wren_connection_msg_t* rkcm = (wren_connection_msg_t*)call RadioPacket.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
-            wren_connection_msg_t* rcm = (wren_connection_msg_t*)payload;
-            
-
-            #ifdef MOTE_DEBUG_MESSAGE_DETAIL
-            
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("crr:2");
-                    call DiagMsg.uint16(rkcm->src);
-                    call DiagMsg.uint8(rcm->close);
-                    call DiagMsg.send();
-                }
-            #endif
-
-            rkcm->src   = rcm->src;
-            
-            
-            rkcm->cmd   = rcm->cmd;
-            rkcm->dst   = rcm->dst;
-            rkcm->logsize = rcm->logsize;
-            rkcm->reset = rcm->reset;
-            rkcm->close = rcm->close;
-            
-            //lastReceivedFrameNo = rkcm->logsize;
-            connectionClient = rcm->src;
-            currentClientLogSize = rkcm->logsize;
-            recordCount = 0; // This line is important that it is going to reset the sliding window
-            ackseqno = 0;
-            downloadDone = 0;
-//                if (rkcm->logsize > 0)
-//                    lastAcceptableFrameNo = rkcm->logsize - 1;
-//                else
-//                    lastAcceptableFrameNo = rkcm->logsize;
-                
-            rkcm->channel = rcm->channel;
-            rkcm->isAcked = 1;
-
-
-            if (rcm->isAcked == 0 && rcm->close == 1) {
-		        #ifdef MOTE_DEBUG_MESSAGE
-		        
-		            if (call DiagMsg.record())
-		            {
-		                call DiagMsg.str("crr:3");
-		                call DiagMsg.uint8(rcm->isAcked);
-		                call DiagMsg.uint8(rcm->close);
-		                call DiagMsg.send();
-		            }
-		        #endif
-                // we got the close connection ack from the mote
-                post closeConnection();
-                // post sendConnection();
-                #ifdef MOTE_DEBUG_MESSAGE
-                
-                    if (call DiagMsg.record())
-                    {
-                        call DiagMsg.str("crr:4");
-                        call DiagMsg.uint8(rcm->isAcked);
-                        call DiagMsg.uint8(rcm->close);
-                        call DiagMsg.send();
-                    }
-                #endif
-            }
-            else {
-                post sendConnection();
-            }
-        }
+	        atomic {
+	            wren_connection_msg_t* rkcm = (wren_connection_msg_t*)call RadioPacket.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
+	            wren_connection_msg_t* rcm = (wren_connection_msg_t*)payload;
+	            
+	
+	            #ifdef MOTE_DEBUG_MESSAGE
+	            
+	                if (call DiagMsg.record())
+	                {
+	                    call DiagMsg.str("crr:2");
+	                    call DiagMsg.uint16(rkcm->src);
+	                    call DiagMsg.uint8(rcm->isAcked);
+	                    call DiagMsg.uint8(rcm->action);
+	                    call DiagMsg.send();
+	                }
+	            #endif
+	
+	            rkcm->src   = rcm->src;
+	            
+	            
+	            rkcm->cmd   = rcm->cmd;
+	            rkcm->dst   = rcm->dst;
+	            rkcm->logsize = rcm->logsize;
+	            rkcm->action = rcm->action;
+	            
+	            //lastReceivedFrameNo = rkcm->logsize;
+	            connectionClient = rcm->src;
+	            currentClientLogSize = rkcm->logsize;
+	            recordCount = 0; // This line is important that it is going to reset the sliding window
+	            ackseqno = 0;
+	            downloadDone = 0;
+	//                if (rkcm->logsize > 0)
+	//                    lastAcceptableFrameNo = rkcm->logsize - 1;
+	//                else
+	//                    lastAcceptableFrameNo = rkcm->logsize;
+	                
+	            rkcm->channel = rcm->channel;
+	            rkcm->isAcked = COM_ACK;
+	
+	
+	            if (rcm->isAcked == COM_ACK && rcm->action == CONNECTION_CLOSE) {
+			        #ifdef MOTE_DEBUG_MESSAGE
+			        
+			            if (call DiagMsg.record())
+			            {
+			                call DiagMsg.str("crr:3");
+			                call DiagMsg.uint8(rcm->isAcked);
+			                call DiagMsg.uint8(rcm->action);
+			                call DiagMsg.send();
+			            }
+			        #endif
+	                // we got the close connection ack from the mote
+	                post closeConnection();
+	                // post sendConnection();
+	                #ifdef MOTE_DEBUG_MESSAGE
+	                
+	                    if (call DiagMsg.record())
+	                    {
+	                        call DiagMsg.str("crr:4");
+	                        call DiagMsg.uint8(rcm->isAcked);
+	                        call DiagMsg.uint8(rcm->action);
+	                        call DiagMsg.send();
+	                    }
+	                #endif
+	            }
+	            else {
+	                post sendConnection();
+	            }
+	            
+	        }
         }
         return ret;
     }
@@ -1200,6 +1201,7 @@ implementation {
 	                return;
 	            }
 	            wcm->src   = connectionClient;
+	            wcm->channel = TOS_NODE_ID;
 	            wcm->close = 1;
 	            
 	        #ifdef MOTE_DEBUG_MESSAGE
@@ -1226,6 +1228,9 @@ implementation {
        if (err != SUCCESS) {
             post closeConnection();    
        }
+       else {
+           call UartPacket.clear(&serialclosepacket);
+       }
     }
 
     task void sendConnection()
@@ -1238,7 +1243,7 @@ implementation {
             //if (rkcm == NULL) {
             //    return;
             //}
-            // rkcm->isAcked = 1;
+            // rkcm->isAcked = COM_ACK;
 
                 #ifdef MOTE_DEBUG_MESSAGE
                 
@@ -1279,6 +1284,9 @@ implementation {
         connectionlocked = FALSE;
        if (err != SUCCESS) {
             post sendConnection();    
+       }
+       else {
+           call RadioPacket.clear(&connectionpacket);
        }
         
     }

@@ -61,12 +61,12 @@ typedef nx_struct wren_connection_msg {
     nx_uint32_t logsize;
     nx_uint8_t channel;
     nx_uint8_t isAcked;
-    nx_uint8_t reset;
-    nx_uint8_t close;
+    nx_uint8_t action;
 } wren_connection_msg_t;
 
 typedef nx_struct wren_close_msg {
     nx_uint16_t src;
+    nx_uint8_t channel;
     nx_uint8_t close;
 } wren_close_msg_t;
 
@@ -118,6 +118,19 @@ enum {
     ENTRY_UART = 1,
     ENTRY_RADIO = 2,
     ENTRY_ACK = 3,
+};
+
+enum {
+    CONNECTION_NONE 	= 0,
+    CONNECTION_CLOSE 	= 1,
+    CONNECTION_OPEN 	= 2,
+    CONNECTION_RESET 	= 3,
+};
+
+enum {
+    COM_NONE 	= 0,
+    COM_ACK 	= 1,
+    COM_NAK 	= 2,
 };
 
 typedef struct FrameItem

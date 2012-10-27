@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 14
+DEFAULT_MESSAGE_SIZE = 13
 
 # The Active Message type associated with this message.
 AM_TYPE = 80
 
 class WRENConnectionMsg(tinyos.message.Message.Message):
-    # Create a new WRENConnectionMsg of size 14.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=14):
+    # Create a new WRENConnectionMsg of size 13.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=13):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -55,11 +55,7 @@ class WRENConnectionMsg(tinyos.message.Message.Message):
         except:
             pass
         try:
-            s += "  [reset=0x%x]\n" % (self.get_reset())
-        except:
-            pass
-        try:
-            s += "  [close=0x%x]\n" % (self.get_close())
+            s += "  [action=0x%x]\n" % (self.get_action())
         except:
             pass
         return s
@@ -397,112 +393,57 @@ class WRENConnectionMsg(tinyos.message.Message.Message):
         return 8
     
     #
-    # Accessor methods for field: reset
+    # Accessor methods for field: action
     #   Field type: short
     #   Offset (bits): 96
     #   Size (bits): 8
     #
 
     #
-    # Return whether the field 'reset' is signed (False).
+    # Return whether the field 'action' is signed (False).
     #
-    def isSigned_reset(self):
+    def isSigned_action(self):
         return False
     
     #
-    # Return whether the field 'reset' is an array (False).
+    # Return whether the field 'action' is an array (False).
     #
-    def isArray_reset(self):
+    def isArray_action(self):
         return False
     
     #
-    # Return the offset (in bytes) of the field 'reset'
+    # Return the offset (in bytes) of the field 'action'
     #
-    def offset_reset(self):
+    def offset_action(self):
         return (96 / 8)
     
     #
-    # Return the offset (in bits) of the field 'reset'
+    # Return the offset (in bits) of the field 'action'
     #
-    def offsetBits_reset(self):
+    def offsetBits_action(self):
         return 96
     
     #
-    # Return the value (as a short) of the field 'reset'
+    # Return the value (as a short) of the field 'action'
     #
-    def get_reset(self):
-        return self.getUIntElement(self.offsetBits_reset(), 8, 1)
+    def get_action(self):
+        return self.getUIntElement(self.offsetBits_action(), 8, 1)
     
     #
-    # Set the value of the field 'reset'
+    # Set the value of the field 'action'
     #
-    def set_reset(self, value):
-        self.setUIntElement(self.offsetBits_reset(), 8, value, 1)
+    def set_action(self, value):
+        self.setUIntElement(self.offsetBits_action(), 8, value, 1)
     
     #
-    # Return the size, in bytes, of the field 'reset'
+    # Return the size, in bytes, of the field 'action'
     #
-    def size_reset(self):
+    def size_action(self):
         return (8 / 8)
     
     #
-    # Return the size, in bits, of the field 'reset'
+    # Return the size, in bits, of the field 'action'
     #
-    def sizeBits_reset(self):
-        return 8
-    
-    #
-    # Accessor methods for field: close
-    #   Field type: short
-    #   Offset (bits): 104
-    #   Size (bits): 8
-    #
-
-    #
-    # Return whether the field 'close' is signed (False).
-    #
-    def isSigned_close(self):
-        return False
-    
-    #
-    # Return whether the field 'close' is an array (False).
-    #
-    def isArray_close(self):
-        return False
-    
-    #
-    # Return the offset (in bytes) of the field 'close'
-    #
-    def offset_close(self):
-        return (104 / 8)
-    
-    #
-    # Return the offset (in bits) of the field 'close'
-    #
-    def offsetBits_close(self):
-        return 104
-    
-    #
-    # Return the value (as a short) of the field 'close'
-    #
-    def get_close(self):
-        return self.getUIntElement(self.offsetBits_close(), 8, 1)
-    
-    #
-    # Set the value of the field 'close'
-    #
-    def set_close(self, value):
-        self.setUIntElement(self.offsetBits_close(), 8, value, 1)
-    
-    #
-    # Return the size, in bytes, of the field 'close'
-    #
-    def size_close(self):
-        return (8 / 8)
-    
-    #
-    # Return the size, in bits, of the field 'close'
-    #
-    def sizeBits_close(self):
+    def sizeBits_action(self):
         return 8
     

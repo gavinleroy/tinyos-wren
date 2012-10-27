@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 3
+DEFAULT_MESSAGE_SIZE = 4
 
 # The Active Message type associated with this message.
 AM_TYPE = -1
 
 class WRENCloseMsg(tinyos.message.Message.Message):
-    # Create a new WRENCloseMsg of size 3.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=3):
+    # Create a new WRENCloseMsg of size 4.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=4):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -32,6 +32,10 @@ class WRENCloseMsg(tinyos.message.Message.Message):
         s = "Message <WRENCloseMsg> \n"
         try:
             s += "  [src=0x%x]\n" % (self.get_src())
+        except:
+            pass
+        try:
+            s += "  [channel=0x%x]\n" % (self.get_channel())
         except:
             pass
         try:
@@ -98,9 +102,64 @@ class WRENCloseMsg(tinyos.message.Message.Message):
         return 16
     
     #
-    # Accessor methods for field: close
+    # Accessor methods for field: channel
     #   Field type: short
     #   Offset (bits): 16
+    #   Size (bits): 8
+    #
+
+    #
+    # Return whether the field 'channel' is signed (False).
+    #
+    def isSigned_channel(self):
+        return False
+    
+    #
+    # Return whether the field 'channel' is an array (False).
+    #
+    def isArray_channel(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'channel'
+    #
+    def offset_channel(self):
+        return (16 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'channel'
+    #
+    def offsetBits_channel(self):
+        return 16
+    
+    #
+    # Return the value (as a short) of the field 'channel'
+    #
+    def get_channel(self):
+        return self.getUIntElement(self.offsetBits_channel(), 8, 1)
+    
+    #
+    # Set the value of the field 'channel'
+    #
+    def set_channel(self, value):
+        self.setUIntElement(self.offsetBits_channel(), 8, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'channel'
+    #
+    def size_channel(self):
+        return (8 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'channel'
+    #
+    def sizeBits_channel(self):
+        return 8
+    
+    #
+    # Accessor methods for field: close
+    #   Field type: short
+    #   Offset (bits): 24
     #   Size (bits): 8
     #
 
@@ -120,13 +179,13 @@ class WRENCloseMsg(tinyos.message.Message.Message):
     # Return the offset (in bytes) of the field 'close'
     #
     def offset_close(self):
-        return (16 / 8)
+        return (24 / 8)
     
     #
     # Return the offset (in bits) of the field 'close'
     #
     def offsetBits_close(self):
-        return 16
+        return 24
     
     #
     # Return the value (as a short) of the field 'close'

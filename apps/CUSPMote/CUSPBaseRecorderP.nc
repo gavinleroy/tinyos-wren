@@ -224,8 +224,8 @@ implementation {
     FrameItem frameTable[RADIO_QUEUE_LEN];
     
     uint8_t connectionAttempt;
-    uint8_t connectionReset;
-    uint8_t connectionClose;
+    uint8_t connectionAction;
+    uint8_t connectionAck;
     
     task void logWriteTask();
     task void sendStatus();
@@ -289,8 +289,8 @@ implementation {
         nextFrameToSend = 0;
         
         connectionAttempt = 0;
-        connectionReset = 0;
-        connectionClose = 0;
+        connectionAction = CONNECTION_NONE;
+        connectionAck = COM_NONE;
         
         lastRadioOut = 0;
         transmitAttempt = 0;
@@ -772,7 +772,7 @@ implementation {
 
                 
                 if ((lastSentFrameNo - rcm->size) > 1) {
-                    connectionReset = 1;
+                    connectionAction = CONNECTION_RESET;
                 }
 
                 lastSentFrameNo = rcm->size;
@@ -796,16 +796,17 @@ implementation {
                     radioIn = 0;
                 }                    
 
-                if (connectionReset == 1) {
+                if (connectionAction == CONNECTION_RESET) {
                     // We have a problem here if the gab between two numbers is greater than 1, 
                     // Do we want to keep going or stop. I think we need to keep going because
                     // the data stored is this way. We can't recover them anyway.else {
                     // So don't stop.    
                     // We need to send commands to restart the sliding window buffer on the base station
+                    connectionAck = COM_NONE;
                     post sendConnection(); // with reset   
                 }
                 else {
-                    // connectionReset = 0;
+                    // connectionAction = CONNECTION_NONE;
                     post radioSendTask();
                 }
             }
@@ -818,23 +819,25 @@ implementation {
                 call DiagMsg.send();
             }
         #endif
-            // log is empty..., set the busy flag to false
-            download = 1;
-            connectionClose = 1;
-            
-            // reset to default
-            logIn = logOut = 0;
-            logBusy = FALSE;
-            logFull = FALSE;
-            
-            // Send the download status to the base station
-            wrenSendStatusTo = currentDST;
-            // call WRENStatusTimer.startPeriodic(STATUS_INTERVAL);
-
-            // WE are done. Close the connection now.
-            //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
-            post sendConnection();
-
+        	atomic {
+	            // log is empty..., set the busy flag to false
+	            download = 1;
+	            
+	            // reset to default
+	            logIn = logOut = 0;
+	            logBusy = FALSE;
+	            logFull = FALSE;
+	            
+	            // Send the download status to the base station
+	            wrenSendStatusTo = currentDST;
+	            // call WRENStatusTimer.startPeriodic(STATUS_INTERVAL);
+	
+	            // WE are done. Close the connection now.
+	            //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
+	            connectionAck = COM_NONE;
+	            connectionAction = CONNECTION_CLOSE;
+	            post sendConnection();
+			}
             
             
             // Send the WREN status to the Base Station to indicate that the download is done.
@@ -1045,7 +1048,7 @@ implementation {
 	            }
 	        #endif
 
-	            if (connectionReset == 1) {
+	            if (connectionAction == CONNECTION_RESET) {
 	                return msg;
 	            }
             }
@@ -1265,13 +1268,17 @@ implementation {
         #endif
         
 		connectionAttempt = 0;
-		connectionClose = 0;
+		connectionAction = CONNECTION_NONE;
+		connectionAck = COM_NONE;
 		
         switch(currentCMD)
         {
             case CMD_DOWNLOAD:
                 //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);
-                post sendConnection();
+				connectionAck = COM_NONE;
+				connectionAction = CONNECTION_OPEN;
+                
+                post sendConnection(); // Send the connection request to the base station
                 // post startDownload();
                 break;
 
@@ -1425,91 +1432,6 @@ implementation {
             }
     }
 
-    task void sendConnection()
-    {
-        uint32_t time;
-        wren_connection_msg_t* sm;
-        time  = call GlobalTime.getLocalTime();
-        sm = (wren_connection_msg_t*)call Packet.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
-
-        #ifdef MOTE_DEBUG_MESSAGE
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("shs:1");
-                call DiagMsg.uint16(currentCMD);
-                call DiagMsg.uint16(currentDST);
-                call DiagMsg.send();
-            }
-        #endif
-
-		currentClientLogSize = 0;
-		
-        if(!connectionlocked) {
-
-            if (sm == NULL) {
-                return;
-            }
-            sm->src = TOS_NODE_ID;
-            sm->cmd = currentCMD;
-            sm->dst = currentDST;
-            sm->logsize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
-            sm->channel = call RadioChannel.getChannel();
-            sm->isAcked = 0;
-            sm->reset = connectionReset;
-            sm->close = connectionClose;
-            
-            currentClientLogSize = sm->logsize;
-            lastReceivedACKNo = sm->logsize;
-            lastSentFrameNo = sm->logsize;
-            nextFrameToSend = sm->logsize;
-            lastACKSeqNo = 0;
-            
-            #ifdef RF233_USE_SECOND_RFPOWER
-                call PacketTransmitPower.set(&connectionpacket, RF233_SECOND_RFPOWER);
-            #endif        
-    
-            call LowPowerListening.setRemoteWakeupInterval(&connectionpacket, 3);
-
-        #ifdef MOTE_DEBUG_MESSAGE
-            if (call DiagMsg.record())
-            {
-                call DiagMsg.str("shs:2");
-                call DiagMsg.uint16(currentDST);
-                call DiagMsg.send();
-            }
-        #endif
-    
-//                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
-            if (call ConnectionSend.send(currentDST, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
-                connectionlocked = TRUE;
-	        #ifdef MOTE_DEBUG_MESSAGE
-	            if (call DiagMsg.record())
-	            {
-	                call DiagMsg.str("shs:3");
-	                call DiagMsg.uint16(currentDST);
-	                call DiagMsg.send();
-	            }
-	        #endif
-            } else {
-                connectionlocked = FALSE;
-                post sendConnection();
-            }
-        }
-    }
-
-    event void ConnectionSend.sendDone(message_t* msg, error_t err) {
-        connectionlocked = FALSE;
-        if (err == SUCCESS) {
-            if (connectionClose == 1) {
-                call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
-            }
-        }
-        else {
-            post sendConnection();
-        }
-        
-    }
-
   event message_t * ConnectionReceive.receive(message_t *msg,
                             void *payload,
                             uint8_t len) {
@@ -1557,54 +1479,141 @@ implementation {
             #endif
 
             // cmd_serial_msg_t* rcm = (cmd_serial_msg_t*)call Packet.getPayload(&cmdpacket, sizeof(rssi_msg_t));
-    
-            rcm = (wren_connection_msg_t*)payload;
-            
-            call Leds.led1On();
-            
-            currentCMD = rcm->cmd;
-            currentChannel = rcm->channel;        
-            currentDST = rcm->dst;
-            
-            if (rcm->close == 1) {
-                // We got ack back from the base station.else 
-                // clean up connection                    
-                connectionClose = 0;
-                call WRENConnectionTimer.stop();     
-                post sendConnection();
-                return msg;           
-            }
-            
-                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
-                
-                    if (call DiagMsg.record())
-                    {
-                        call DiagMsg.str("hsr:3");
-                        call DiagMsg.uint16(currentCMD);
-                        call DiagMsg.uint16(currentChannel);
-                        call DiagMsg.uint16(currentDST);
-                        call DiagMsg.send();
-                    }
-                #endif
-            
-            
-            if (rcm->isAcked == 1) {
-                if (rcm->reset == 1) {
-                    atomic {
-                        connectionReset = 0;
-                    }
-                    post radioSendTask();    
-                } else {
-                    post startDownload();
-                }
-            }
-            else {
-                // change back to normal channel 11 or random backoff and try again
+    		atomic {
+	            rcm = (wren_connection_msg_t*)payload;
+	            
+	            call Leds.led1On();
+	            
+	            currentCMD = rcm->cmd;
+	            currentChannel = rcm->channel;        
+	            currentDST = rcm->dst;
+	            
+	            if (rcm->isAcked == COM_ACK && rcm->action == CONNECTION_CLOSE) {
+	                // We got ack back from the base station.else 
+	                // clean up connection                    
+	                connectionAck = COM_ACK;
+	                connectionAction = CONNECTION_CLOSE;
+	                post sendConnection();
+	                return msg;           
+	            }
+	            
+	                #ifdef MOTE_DEBUG_MESSAGE_DETAIL
+	                
+	                    if (call DiagMsg.record())
+	                    {
+	                        call DiagMsg.str("hsr:3");
+	                        call DiagMsg.uint16(currentCMD);
+	                        call DiagMsg.uint16(currentChannel);
+	                        call DiagMsg.uint16(currentDST);
+	                        call DiagMsg.send();
+	                    }
+	                #endif
+	            
+	            
+	            if (rcm->isAcked == COM_ACK) {
+	                if (rcm->action == CONNECTION_RESET) {
+	                    atomic {
+	                        connectionAck = COM_NONE;
+	                        connectionAction = CONNECTION_NONE;
+	                    }
+	                    post radioSendTask();    
+	                } else {
+	                    post startDownload();
+	                }
+	            }
+	            else {
+	                // change back to normal channel 11 or random backoff and try again
+	            }
             }
         }
     }
     return msg;
   }
+
+    task void sendConnection()
+    {
+        uint32_t time;
+        wren_connection_msg_t* sm;
+        time  = call GlobalTime.getLocalTime();
+        sm = (wren_connection_msg_t*)call Packet.getPayload(&connectionpacket, sizeof(wren_connection_msg_t));
+
+        #ifdef MOTE_DEBUG_MESSAGE
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("shs:1");
+                call DiagMsg.uint16(currentCMD);
+                call DiagMsg.uint16(currentDST);
+                call DiagMsg.send();
+            }
+        #endif
+
+        currentClientLogSize = 0;
+        
+        if(!connectionlocked) {
+
+            if (sm == NULL) {
+                return;
+            }
+            sm->src = TOS_NODE_ID;
+            sm->cmd = currentCMD;
+            sm->dst = currentDST;
+            sm->logsize = (call LogWrite.currentOffset() - call LogRead.currentOffset()) / sizeof(logentry_t);
+            sm->channel = call RadioChannel.getChannel();
+            //sm->isAcked = COM_NONE;
+            sm->isAcked = connectionAck;
+            sm->action = connectionAction;
+            
+            currentClientLogSize = sm->logsize;
+            lastReceivedACKNo = sm->logsize;
+            lastSentFrameNo = sm->logsize;
+            nextFrameToSend = sm->logsize;
+            lastACKSeqNo = 0;
+            
+            #ifdef RF233_USE_SECOND_RFPOWER
+                call PacketTransmitPower.set(&connectionpacket, RF233_SECOND_RFPOWER);
+            #endif        
+    
+            call LowPowerListening.setRemoteWakeupInterval(&connectionpacket, 3);
+
+        #ifdef MOTE_DEBUG_MESSAGE
+            if (call DiagMsg.record())
+            {
+                call DiagMsg.str("shs:2");
+                call DiagMsg.uint16(currentDST);
+                call DiagMsg.send();
+            }
+        #endif
+    
+//                if (call CMDSend.send(AM_BROADCAST_ADDR, &statuspacket, sizeof(serial_status_msg_t), time) == SUCCESS) {
+            if (call ConnectionSend.send(currentDST, &connectionpacket, sizeof(wren_connection_msg_t), time) == SUCCESS) {
+                connectionlocked = TRUE;
+            #ifdef MOTE_DEBUG_MESSAGE
+                if (call DiagMsg.record())
+                {
+                    call DiagMsg.str("shs:3");
+                    call DiagMsg.uint16(currentDST);
+                    call DiagMsg.send();
+                }
+            #endif
+            } else {
+                connectionlocked = FALSE;
+                post sendConnection();
+            }
+        }
+    }
+
+    event void ConnectionSend.sendDone(message_t* msg, error_t err) {
+        connectionlocked = FALSE;
+        if (err == SUCCESS) {
+            if (connectionAction == CONNECTION_CLOSE) {
+                //call WRENConnectionTimer.startPeriodic(CONNECTION_TIMEOUT);                
+            }
+        }
+        else {
+            post sendConnection();
+        }
+        
+    }
 
     event void CMDSend.sendDone(message_t* msg, error_t err) {
         cmdlocked = FALSE;
