@@ -897,20 +897,23 @@ implementation {
                     }
                 #endif
 
-    //            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-                // 0 address: Controller
-
-                #ifdef RF233_USE_SECOND_RFPOWER
-                    call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
-                #endif        
-        
-                call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 3);
-                //if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-                if (call WRENSend.send(wrenSendStatusTo, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
-                    wrenlocked = TRUE;
-                } else {
-                    wrenlocked = FALSE;
-                    post sendWRENStatus();
+                if (sm->buffersize > 0) 
+                {
+	    //            if (call WRENSend.send(AM_BROADCAST_ADDR, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+	                // 0 address: Controller
+	
+	                #ifdef RF233_USE_SECOND_RFPOWER
+	                    call PacketTransmitPower.set(&wrenpacket, RF233_SECOND_RFPOWER);
+	                #endif        
+	        
+	                call LowPowerListening.setRemoteWakeupInterval(&wrenpacket, 3);
+	                //if (call WRENSend.send(CONTROLLER_NODEID, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+	                if (call WRENSend.send(wrenSendStatusTo, &wrenpacket, sizeof(wren_status_msg_t), time) == SUCCESS) {
+	                    wrenlocked = TRUE;
+	                } else {
+	                    wrenlocked = FALSE;
+	                    post sendWRENStatus();
+	                }
                 }
             }
         }
