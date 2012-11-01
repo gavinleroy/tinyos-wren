@@ -235,6 +235,7 @@ implementation
         newLocalAverage += localSum + (localAverageRest / tableEntries);
         newOffsetAverage += offsetSum + (offsetAverageRest / tableEntries);
 
+#ifdef SKEWCALC
         localSum = offsetSum = 0;
         for(i = 0; i < MAX_ENTRIES; ++i)
             if( table[i].state == ENTRY_FULL ) {
@@ -252,6 +253,9 @@ implementation
         	newSkew = (float)offsetSum / (float)localSum;
 			
 		}
+#else
+        newSkew = 0.0;
+#endif
 
         atomic
         {
@@ -358,7 +362,7 @@ implementation
 
     event message_t* Receive.receive(message_t* msg, void* payload, uint8_t len)
     {
-    	uint8_t incomingID;
+    	uint16_t incomingID;
 
 #ifdef TIMESYNC_DEBUG   // this code can be used to simulate multiple hopsf
         uint8_t incomingID = (uint8_t)((TimeSyncMsg*)payload)->nodeID;
@@ -369,7 +373,7 @@ implementation
         if( diff < -16 || diff > 16 )
             return msg;
 #endif
-        incomingID = (uint8_t)((TimeSyncMsg*)payload)->nodeID;
+        incomingID = (uint16_t)((TimeSyncMsg*)payload)->nodeID;
 
         if(incomingID != TIMESYNCNODEID)
         {
