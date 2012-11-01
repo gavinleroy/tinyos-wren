@@ -54,6 +54,8 @@ module TestWrenP
         interface SplitControl as AMControl;
         interface Packet;
         interface Timer<TMilli> as ReflectionTimer;
+        interface Timer<TMilli> as FailedTimer;
+        interface Random;
         /* Accelerometer */
         interface Lis3dh;
         interface Lis3dhAccel;
@@ -81,6 +83,9 @@ implementation
 
 
     uint8_t test = NO_TEST;
+    uint8_t blink;
+    uint8_t failedTests;
+    uint8_t failedTestsList;
     bool testPassed;
     uint8_t reflectionCounter;
 
@@ -209,7 +214,7 @@ implementation
         if (&packet == bufPtr) {
             printf("Send SUCCESS\n");
             reflectionCounter++;
-            call ReflectionTimer.startOneShot(256);
+            call ReflectionTimer.startOneShot(256 + call Random.rand32()%512);
             printfflush();
         } else {
             printf("SendDone Failed\n");
@@ -453,6 +458,7 @@ implementation
     }
 
     event void LogWrite.eraseDone(error_t result) {
+        call Leds.led2Off();
         if (scheck(result))
             done();
     }
@@ -470,6 +476,7 @@ implementation
             case A_ERASE:
                 printf("Erase\n");
                 printfflush();
+                call Leds.led2On();
                 scheck(call LogWrite.erase());
                 break;
             case A_WRITE:
@@ -544,6 +551,53 @@ implementation
     /************************************************************************
      * MAIN TEST CONTROL LOOP
      */
+
+    task void failedTask();
+
+    event void FailedTimer.fired()
+    {
+        call Leds.led2Off();
+        blink += 1;
+        call Leds.led0Toggle();
+        if(blink >= test * 2) {
+            post failedTask();
+        } else {
+            call FailedTimer.startOneShot(256);
+        }
+
+
+    }
+
+    task void failedTask()
+    {
+        uint8_t i;
+
+        printf("t 0x%x 0x%x\n", failedTestsList, failedTests);
+        printfflush();
+        blink = 0;
+        if(failedTestsList)
+        {
+            // there are more
+        } else {
+            // start from scratch
+            failedTestsList = failedTests;
+        }
+        for(i=0; i<8; i++) {
+            if((failedTestsList >> i) & 0x01) {
+                test = i;
+                failedTestsList &= ~(1<<i);
+                break;
+            }
+        }
+        call Leds.led0Off();
+        call Leds.led1Off();
+        call Leds.led2Off();
+
+        call Leds.led2On();
+        call FailedTimer.startOneShot(2048);
+
+    }
+
     task void nextTest()
     {
         bool runNextTest = TRUE;
@@ -551,10 +605,8 @@ implementation
         if(testPassed) {
             printf("Last Test PASSED\n");
         } else {
+            failedTests |= (1<<test);
             printf("Last Test FAILED\n");
-            printfflush();
-            call Leds.led0On();
-            return;
         }
         printfflush();
 
@@ -589,7 +641,14 @@ implementation
             case FLASH_TEST:
                 /* This is the last test. Turn on Green if we get here. */
                 test = NO_TEST;
+                if(failedTests)
+                {
+                    // some tests failed
+                    post failedTask();
+                    return;
+                }
                 call Leds.led1On();
+                call FailedTimer.stop();
                 return;
 
             default:
@@ -605,7 +664,10 @@ implementation
 
     event void Boot.booted() {
         printf("Booted\n");
+        printf("Booted\n");
         testPassed = TRUE;
+        failedTests = 0;
+        call FailedTimer.stop();
         post nextTest();
     }
 

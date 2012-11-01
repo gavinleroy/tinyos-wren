@@ -50,6 +50,8 @@ implementation {
 
   components PrintfC, SerialStartC;
 
+  components new TimerMilliC() as FailedTimer;
+  App.FailedTimer -> FailedTimer;
 
   /* Power Test */
   components BQ25010C;
@@ -67,6 +69,8 @@ implementation {
   App.AMControl -> ActiveMessageC;
   App.Packet -> AMSenderC;
   App.ReflectionTimer -> ReflectionTimer;
+  components RandomC;
+  App.Random -> RandomC;
 
   /* Accelerometer */
   components Lis3dhC;
