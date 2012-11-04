@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2005 The Regents of the University  of California.  
+ * Copyright (c) 2012 University of Utah.  
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,37 +29,25 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- * Copyright (c) 2002-2005 Intel Corporation
- * All rights reserved.
- *
- * This file is distributed under the terms in the attached INTEL-LICENSE     
- * file. If you do not find these files, copies can be found by writing to
- * Intel Research Berkeley, 2150 Shattuck Avenue, Suite 1300, Berkeley, CA, 
- * 94704.  Attention:  Intel License Inquiry.
- */
 
 /**
- * Null is an empty skeleton application.  It is useful to test that the
- * build environment is functional in its most minimal sense, i.e., you
- * can correctly compile an application. It is also useful to test the
- * minimum power consumption of a node when it has absolutely no 
- * interrupts or resources active.
  *
- * @author Cory Sharp <cssharp@eecs.berkeley.edu>
- * @date February 4, 2006
+ * @author Kyeong T. Min
  */
 
+#define NEW_PRINTF_SEMANTICS
 #include "StorageVolumes.h"
 
-configuration NullAppC{}
+configuration NullWrenAppC{}
 implementation {
-  components MainC, NullC;
+  components MainC, NullWrenP as App, LedsC, NoLedsC;
   components new ConfigStorageC(VOLUME_CONFIGTEST);
+  components ActiveMessageC;
 
-  MainC.Boot <- NullC;
-  NullC.Config -> ConfigStorageC.ConfigStorage;
-  NullC.Mount  -> ConfigStorageC.Mount;
-  
+  MainC.Boot <- App;
+  App.Config -> ConfigStorageC.ConfigStorage;
+  App.Mount  -> ConfigStorageC.Mount;
+  App.AMControl -> ActiveMessageC;
+
 }
 

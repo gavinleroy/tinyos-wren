@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2005 The Regents of the University  of California.  
+ * Copyright (c) 2012 University of Utah.  
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,38 +29,23 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- * Copyright (c) 2002-2005 Intel Corporation
- * All rights reserved.
- *
- * This file is distributed under the terms in the attached INTEL-LICENSE     
- * file. If you do not find these files, copies can be found by writing to
- * Intel Research Berkeley, 2150 Shattuck Avenue, Suite 1300, Berkeley, CA, 
- * 94704.  Attention:  Intel License Inquiry.
- */
 
 /**
- * Null is an empty skeleton application.  It is useful to test that the
- * build environment is functional in its most minimal sense, i.e., you
- * can correctly compile an application. It is also useful to test the
- * minimum power consumption of a node when it has absolutely no 
- * interrupts or resources active.
  *
- * @author Cory Sharp <cssharp@eecs.berkeley.edu>
- * @date February 4, 2006
+ * @author Thomas Schmid
  */
-module NullC @safe()
+
+module NullWrenP
 {
-  uses {
-  		interface Boot;
+    uses {
+        interface Boot;
         interface ConfigStorage as Config;
         interface Mount as Mount;
-  }
-  
+        interface SplitControl as AMControl;
+    }
 }
 implementation
 {
-	
     typedef struct config_t {
         uint16_t version;
         uint8_t sensing;
@@ -78,18 +63,18 @@ implementation
         DEFAULT_SENSING    = 0,
         DEFAULT_GLOBALTIME = 0,
         DEFAULT_REBOOT     = 0,
-        DEFAULT_HALT	   = 0,
+        DEFAULT_HALT       = 0,
     };
 
     config_t conf;
-        
-  event void Boot.booted() {
+
+    event void Boot.booted() {
     // Do nothing.
         if(call Mount.mount() != SUCCESS) {
              //uohhh... handle this how?
         }
-  }
-  
+    }
+
     event void Mount.mountDone(error_t error) {
         if (error == SUCCESS) {
             if (call Config.valid() == TRUE) {
@@ -110,7 +95,7 @@ implementation
             // Handle failure
         }
     }
-    
+
           event void Config.readDone(storage_addr_t addr, void* buf, 
             storage_len_t len, error_t err) __attribute__((noinline)) {
 
@@ -119,14 +104,14 @@ implementation
             if (conf.version == CONFIG_VERSION) {
                 conf.sensing    = DEFAULT_SENSING;
                 conf.reboot = 0;
-                conf.halt		= DEFAULT_HALT;
+                conf.halt       = DEFAULT_HALT;
             }
             else {
                 conf.version    = CONFIG_VERSION;
                 conf.sensing    = DEFAULT_SENSING;
                 conf.globaltime = DEFAULT_GLOBALTIME;
                 conf.reboot     = DEFAULT_REBOOT;
-                conf.halt		= DEFAULT_HALT;
+                conf.halt       = DEFAULT_HALT;
             }
             call Config.write(CONFIG_ADDR, &conf, sizeof(conf));
         }
@@ -155,5 +140,12 @@ implementation
             // Handle failure
         }
     }
+
+    event void AMControl.startDone(error_t err) {
+    }
+
+    event void AMControl.stopDone(error_t err) {
+    }
+
 }
 
