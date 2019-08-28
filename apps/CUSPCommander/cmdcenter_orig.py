@@ -264,10 +264,6 @@ class CmdCenter:
         self.basestations[baseid] = 0
 
     def existDownload(self, nodeid):
-	### Gavin ###
-	if not __debug__:
-	    print "EXISTDOWNLOAD::Entered"
-	############
         exist = False
         for baseid in self.basestations:
             if self.basestations[baseid] == nodeid:
@@ -323,10 +319,6 @@ class CmdCenter:
 #                self.startNextDownload(baseid)                
 
     def checkCurrentDownload(self, baseid, nodeid):
-	### Gavin ###
-	if not __debug__:
-	    print "CHECKCURRENTDOWNLOAD::Entered"
-	############
         if nodeid not in self.logSize.keys(): #This means not started yet. 
             self.downloadCommandController(baseid, nodeid)
         else:
@@ -342,17 +334,8 @@ class CmdCenter:
                 self.startNextDownload(baseid)                
 
     def startNextDownload(self, baseid):
-	### Gavin ###
-	if not __debug__:
-	    print "STARTNEXTDOWNLOAD::Entered"
-	############
-
         nodeid = self.getNextDownload()
 	
-	### Gavin ####
-	if not __debug__:
-	    print "STARTNEXTDOWNLOAD::Next ID: ", nodeid
-	###################
 
         if nodeid > 0:
             if not self.existDownload(nodeid): #if it is not already downloading...
@@ -360,10 +343,6 @@ class CmdCenter:
                 self.downloadMaxTry[nodeid] = 0
                 self.moteLogSize[nodeid] = 0
                 self.downloadCommandController(baseid, nodeid) # send the download command to Controller
-		#Gavin
-		if not __debug__:
-		    print "...Returned from downloadCommandController..."
-		######
             else:
                 if self.downloadState == DOWNLOAD_STOP:
                     return;
@@ -372,68 +351,31 @@ class CmdCenter:
                     self.startNextDownload(baseid)
                 
     def downloadData(self):
-	### Gavin ###
-	if not __debug__:
-	    print "DOWNLOADDATA::Entered"
-	############
-
         print "downloadData mapping..."
         self.printDownloadMapping()
-	### Gavin ####
-	if not __debug__:
-	    print "PRINTDOWNLOADMAPPING::Returned"
-	############
 
         if not self.isBusy:
-	    
+
             self.isBusy = True
-
-	    ## Gavin #####
-	    if not __debug__:
-	        print "Motes in self.motes"
-                for elem in self.motes:
-                    print elem
-	        print "id's and base id"
-	        for baseid, nodeid in self.basestations.iteritems():
-		    print baseid,":",nodeid
-	    #############
-
             for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
 		
-		#### Gavin #######
-		if not __debug__:
-		    print "DOWNLOADDATA::Baseid: ", baseid, "NodeID:", nodeid
-		##################
 
                 if self.downloadState == DOWNLOAD_STOP:
 
-		    ## Placed By Gavin for Debugging purposes ##
-		    if not __debug__:
-		        print "DOWNLOAD DATA::retured when on node: ", nodeid
-		    ############################################
 
                     return
 
                 if nodeid == 0:
                     self.startNextDownload(baseid)
-		    ##### Gavin
-		    if not __debug__:
-		        print "...Returned from startNExtDownload..."
-		    #############
                 else:
                     self.checkCurrentDownload(baseid, nodeid) #check to see if the download is still in progress
 
             self.isBusy = False    
-
+        
         with self.lock:
             self.downloadTimer.reset()
                 
     def downloadCommandController(self, channel, nodeid):
-	### Gavin ###
-	if not __debug__:
-	    print "DOWNLOADCOMMANDCONTROLLER::Entered"
-	############
-
         #self.resetDownloadTimer()
         if self.downloadMaxTry[nodeid] < DOWNLOAD_MAX_TRY:
             if self.downloadState == DOWNLOAD_STOP:
@@ -452,26 +394,14 @@ class CmdCenter:
                 #self.resetDownloadTimer()
         #            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
-		###### Gavin ##############
-		if not __debug__:
-		    print "DOWNLOADCOMMANDCONTROLLER::Sending message to download: ", nodeid
-		###############################################
 
                 self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
-		##### Gavin ####
-		if not __debug__:
-		    print "DOWNLOADCOMMANDCONTROLLER::Done sending message: ", nodeid
-		###########################
 
                 #self.downloadTimer.reset()
                 #time.sleep(1)
                 #self.downloadTimer.reset()
             else:
-		##### Gavin #####
-		if not __debug__:
-		    print "DOWNLOADCOMMANDCONTROLLER::MsgAlreadySent, returning from function"
-		################
                 self.printWrite("download start: %s, channel: %s, nodeid: %s\n"%(time.ctime(), channel, nodeid))
                 self.printFlush()
                 self.resetDownloadMaxTry(nodeid)
@@ -480,15 +410,7 @@ class CmdCenter:
                 return
             
             self.downloadMaxTry[nodeid] += 1
-	    #### Gavin #####
-	    if not __debug__:
-	        print "downloadMaxTry[",nodeid,"]: ",self.downloadMaxTry[nodeid], ":",DOWNLOAD_MAX_TRY
-	    ################
         else:
-	    ##### Gavin #####
-	    if not __debug__:
-	        print "DOWNLOADCOMMANDCONTROLLER::MaxTriesReached: ", nodeid
-	    #################
             self.resetDownloadMaxTry(nodeid)
             self.startNextDownload(channel)
 
@@ -639,15 +561,6 @@ class CmdCenter:
             
     def printDownloadMapping(self):
 
-	### Gavin ####
-	# Why does the following only print one baseid, nodeid pair?? Why does the for loop not iterate through all the nodes??
-	# If we know it will only do one node what is the point of the for loop?
-	#######################
-
-	### Gavin ###
-	if not __debug__:
-	    print "PRINTDOWNLOADMAPPING::Entered"
-	############
 
         for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
             print "mapping:", baseid, nodeid
@@ -761,8 +674,6 @@ class CmdCenter:
         print "Hit 'r <nodeid>' to restore log of one specific node"
         print "Hit 't <nodeid>' to start blinking a specific node"
         print "Hit 'a <nodeid>' to stop blinking a specific node"
-	if not __debug__:
-	    print "____DEBUGGING ON____"
 
     def main_loop(self):
 
@@ -772,6 +683,7 @@ class CmdCenter:
         
         while 1:
 	    c = raw_input()
+
             self.downloadState = DOWNLOAD_START
             
             #self.printWrite("%.3f, command: %s\n"%(time.time(), c))
@@ -868,15 +780,9 @@ class CmdCenter:
 #                self.setBaseStationChannel()
                 # start download now
                 
-		
-		if not __debug__:
-                	self.resetDownloadTimer()
-			while(self.downloadMode == DOWNLOAD_ALL and len(self.motes) > 0):
-	                	self.downloadData()
-				time.sleep(10)
-		else:
-			self.downloadData()
-		####
+                self.resetDownloadTimer()
+
+                self.downloadData()
             elif c == 'r':
                 # restore log
                 c = raw_input("Are you sure you want to restore log? [y/n]")
