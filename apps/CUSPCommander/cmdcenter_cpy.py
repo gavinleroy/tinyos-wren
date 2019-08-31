@@ -360,7 +360,6 @@ class CmdCenter:
                     self.startNextDownload(baseid)
 
     def downloadData(self):
-
         print "downloadData mapping..."
         self.printDownloadMapping()
 
@@ -380,7 +379,6 @@ class CmdCenter:
 
             self.isBusy = False    
 
-	# Reset the timer to re-call the downloadData() function
         with self.lock:
             self.downloadTimer.reset()
 	
@@ -563,6 +561,11 @@ class CmdCenter:
 	# Why does the following only print one baseid, nodeid pair?? Why does the for loop not iterate through all the nodes??
 	# If we know it will only do one node what is the point of the for loop?
 	#######################
+
+	### Gavin ###
+	if not __debug__:
+	    print "PRINTDOWNLOADMAPPING::Entered"
+	############
 
         for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
             print "mapping:", baseid, nodeid
@@ -761,10 +764,10 @@ class CmdCenter:
                     continue
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_ERASE)
+                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'd':
-		# Set mode to download all
                 self.downloadMode = DOWNLOAD_ALL
 
                 # start download
@@ -772,16 +775,21 @@ class CmdCenter:
                 self.scanMotes()
                 self.setBaseStationChannel()
 
-		# Give some time for the motes to settle down.
-                time.sleep(3)
-		# Make sure that sensing is off.
-		self.stopSensing(0xffff)
-
-		# Reset the download timer. When the timer expires (every 4 seconds)
-		# it will call the downloadData() function.
-		self.resetDownloadTimer()
-		self.downloadData()
-
+                time.sleep(3) #give sometime to settle down                
+                self.stopSensing(0xffff)
+#                # get the first group of motes for download and set channels for base stations
+#                # set base channels
+                # start download now
+                
+		
+		if not __debug__:
+                	self.resetDownloadTimer()
+			while(self.downloadMode == DOWNLOAD_ALL and len(self.motes) > 0):
+	                	self.downloadData()
+				time.sleep(10)
+		else:
+			self.downloadData();
+		####
             elif c == 'r':
                 # restore log
                 c = raw_input("Are you sure you want to restore log? [y/n]")
@@ -868,11 +876,10 @@ class CmdCenter:
 
             elif c == 'h':
                 self.help()
-	    else:
-		print("Input not recognized.")
 
 
 def main():
+
     cc = CmdCenter()
     cc.main_loop()  # don't expect this to return...
 

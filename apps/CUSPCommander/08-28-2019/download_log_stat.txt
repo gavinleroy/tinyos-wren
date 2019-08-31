@@ -1,0 +1,10 @@
+Wed Aug 28 20:53:56 2019, command: s
+id: 4086, sensing: 0, local: 177295601, global: 177295601, isSync: 1, reboot: 1, bat: 4.52, logsize: 874, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 177294436, global: 177294436, isSync: 1, reboot: 1, bat: 4.57, logsize: 874, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 177295049, global: 177295049, isSync: 1, reboot: 1, bat: 4.45, logsize: 874, isErased: 0, download: 0, channel: 11,
+3 messages received!
+Wed Aug 28 20:54:29 2019, command: s
+id: 4086, sensing: 0, local: 177328989, global: 177328989, isSync: 1, reboot: 1, bat: 4.52, logsize: 874, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 177328106, global: 177328106, isSync: 1, reboot: 1, bat: 4.58, logsize: 874, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 177328352, global: 177328352, isSync: 1, reboot: 1, bat: 4.44, logsize: 874, isErased: 0, download: 0, channel: 11,
+3 messages received!

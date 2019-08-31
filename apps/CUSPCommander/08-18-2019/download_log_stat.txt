@@ -1,0 +1,32 @@
+Sun Aug 18 14:04:29 2019, command: x
+Sun Aug 18 14:04:47 2019, command: s
+id: 4017, sensing: 0, local: 229978143, global: 229978143, isSync: 1, reboot: 0, bat: 4.58, logsize: 145, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 227400765, global: 227400765, isSync: 1, reboot: 1, bat: 4.59, logsize: 48, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 227404381, global: 227404381, isSync: 1, reboot: 1, bat: 4.56, logsize: 129, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 229978502, global: 229978502, isSync: 1, reboot: 0, bat: 4.49, logsize: 64, isErased: 0, download: 0, channel: 11,
+4 messages received!
+Sun Aug 18 14:05:46 2019, command: x
+Sun Aug 18 14:05:51 2019, command: s
+id: 4017, sensing: 0, local: 230043328, global: 230043328, isSync: 1, reboot: 0, bat: 4.58, logsize: 145, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 227464752, global: 227464752, isSync: 1, reboot: 1, bat: 4.59, logsize: 48, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 227470792, global: 227470792, isSync: 1, reboot: 1, bat: 4.57, logsize: 129, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 230042582, global: 230042582, isSync: 1, reboot: 0, bat: 4.61, logsize: 64, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 230042561, global: 230042561, isSync: 1, reboot: 0, bat: 4.53, logsize: 64, isErased: 0, download: 0, channel: 11,
+5 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+0 messages received!
+Sun Aug 18 14:06:39 2019, command: d
+Sun Aug 18 14:13:26 2019, command: d
+Sun Aug 18 14:35:16 2019, command: x
+Sun Aug 18 14:35:19 2019, command: d
+connection and file closed: Sun Aug 18 14:35:25 2019, nodeid: 4086
+download end: Sun Aug 18 14:35:25 2019, channel: 12, nodeid: 4086
