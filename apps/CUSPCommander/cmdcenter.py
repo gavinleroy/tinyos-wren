@@ -70,12 +70,11 @@ class CmdCenter:
     
     f = {}
     motes = []
-#    downloadingMotes = []
     
     basemsgs = {}
     wrenmsgs = {}
     wrenconnectionmsgs = {}
-    basestations = {}
+    basestations = {} # Dictionary of {downloader, nodeid} pairs. Means downloader is currently working on nodeid
     
     moteLogSize = {}
     downloadMaxTry = defaultdict(int)
@@ -100,18 +99,18 @@ class CmdCenter:
 
         self.logger = Logger(basedir+"/download_log_stat.txt")
         
-        #self.downloadTimer = ResettableTimer(3, self.checkDownloadAll)
 
+	# Testing out this optimization for the motes. Gavin
         # connecting serial forwarder for all nodes
         numberOfMotes = 0
         for n in self.m.get_nodes():
             sys.stdout.write("%d,%s "%(n.id, n.serial))
             numberOfMotes = numberOfMotes + 1
-        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
-        sys.stdout.flush()
+#        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
+#        sys.stdout.flush()
 
         # starting mote interfaces
-        for n in self.m.get_nodes():
+#        for n in self.m.get_nodes():
             baseFileName = "/tmp/sf"
             p = msp.ManagedSubproc("/usr/bin/java net.tinyos.sf.SerialForwarder -no-gui -port %d -comm serial@%s:tmote"%(20000+n.id, n.serial),
                     stdout_disk = baseFileName + ".%d.log"%(n.id,),
@@ -119,9 +118,14 @@ class CmdCenter:
                     stdout_fns = [ ])
             p.start()
             self.sfprocess[n.id] = p
+	### These lines were added from above...
+        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
+        sys.stdout.flush()
+
+	########################################
 
         # give it some time to establish all the serial forwarders
-        time.sleep(3)
+        time.sleep(4) # I also changed this time from 3 to 4
 
         for n in self.m.get_nodes():
             #print n.id
@@ -131,9 +135,6 @@ class CmdCenter:
 
         #add us as listener for the different messages
         for n in self.m.get_nodes():
-            #self.mif[n.id].addListener(self, CmdSerialMsg.CmdSerialMsg)
-            #self.mif[n.id].addListener(self, MoteStatusMsg.MoteStatusMsg)
-            #self.mif[n.id].addListener(self, MoteRssiMsg.MoteRssiMsg)
             self.mif[n.id].addListener(self, RssiSerialMsg.RssiSerialMsg)
             self.mif[n.id].addListener(self, SerialStatusMsg.SerialStatusMsg)
             self.mif[n.id].addListener(self, BaseStatusMsg.BaseStatusMsg)
@@ -142,11 +143,8 @@ class CmdCenter:
             self.mif[n.id].addListener(self, WRENCloseMsg.WRENCloseMsg)
 
 
+    # Whenever a message is received from a mote this function is called.
     def receive(self, src, msg):
-        #print time.time(), msg.addr
-        #if msg.get_amType() == CmdSerialMsg.AM_TYPE:
-        #    m = CmdSerialMsg.CmdSerialMsg(msg.dataGet())
-        #    print m
 
         if msg.get_amType() == RssiSerialMsg.AM_TYPE:
             m = RssiSerialMsg.RssiSerialMsg(msg.dataGet())
@@ -165,11 +163,6 @@ class CmdCenter:
                     sys.stdout.flush()
                 self.dl += 1
 
-#            if m.get_dst() not in self.downloadingMotes:
-#                self.downloadingMotes.append(m.get_dst())
-
-            #sys.stdout.write("dst: %d, src, %d, c: %d, rssi, %d, sloc: %d, sglob: %d, dstloc: %d, dstglob: %d, Sync: %d, reboot: %d, bat: %.2f, size: %d\n"%(m.get_dst(), m.get_src(), m.get_counter(), m.get_rssi(), m.get_srclocaltime(), m.get_srcglobaltime(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboot(), m.get_bat()/4096.0*5, m.get_size()))
-            #sys.stdout.write("dst: %d, src, %d, size: %d\n"%(m.get_dst(), m.get_src(), m.get_size()))
 
             if m.get_dst() not in self.f.keys():
                 sys.stdout.write(basedir+"/node_%d.log\n"%(m.get_dst()))
@@ -193,10 +186,6 @@ class CmdCenter:
                 f.write("%.3f, %d\n"%(time.time(), m.get_globaltime()))
                 f.close()
             
-            # collect all client motes out there
-            # print("exist", m.get_src(), self.motes.count(m.get_src()))
-            #if self.motes.count(m.get_src()) == 0:
-            #    self.motes.append(m.get_src())
 
         if msg.get_amType() == WRENStatusMsg.AM_TYPE:
             with self.lock:
@@ -218,11 +207,6 @@ class CmdCenter:
 
                 m = WRENConnectionMsg.WRENConnectionMsg(msg.dataGet())
                 self.wrenconnectionmsgs[m.get_src()] = m
-
-            # collect all client motes out there
-            # print("exist", m.get_src(), self.motes.count(m.get_src()))
-#            if self.motes.count(m.get_src()) == 0 and m.get_logsize() > 0:
-#                self.motes.append(m.get_src())
 
         if msg.get_amType() == WRENCloseMsg.AM_TYPE:
             with self.lock:
@@ -264,29 +248,30 @@ class CmdCenter:
         self.basestations[baseid] = 0
 
     def existDownload(self, nodeid):
-	### Gavin ###
-	if not __debug__:
-	    print "EXISTDOWNLOAD::Entered"
-	############
         exist = False
+	# For every downloader
         for baseid in self.basestations:
+	    # If the downloader id maps to the nodeid
             if self.basestations[baseid] == nodeid:
                 exist = True
                 break
         return exist
 
     def getNextDownload(self):
-        nodeid = DOWNLOAD_END
-        if self.downloadState == DOWNLOAD_START:
+        nodeid = DOWNLOAD_END 
+        if self.downloadState == DOWNLOAD_START: #Make sure we're still downloading
+	    #Note that self.motes is a list of all the motes connected
             if len(self.motes) > 0:
-                nodeid = self.motes.pop()
+                nodeid = self.motes.pop() #Pop the next node off the stack
             else:
+		# If there aren't any nodes in the stack
+		#    do a quick scan to verify we have tried all of them.
                 if self.downloadMode == DOWNLOAD_ALL:
                     self.scanMotes() #find all motes out there
-                    time.sleep(3)
+                    time.sleep(4) # Wait for responses, Gavin modified this to be 4 seconds
                     if len(self.motes) > 0: #if we have motes to download ...
                         nodeid = self.motes.pop()  # go ahead and pop one
-        if nodeid == DOWNLOAD_END:
+        if nodeid == DOWNLOAD_END: # If the node ID didn't change we don't have any left
             print "Download finished ! Please wait until the remaining process finishes..."
         return nodeid
 
@@ -299,34 +284,8 @@ class CmdCenter:
             if nodeid > 0:
                 self.checkCurrentDownload(baseid, nodeid)
 
-#    def checkCurrentDownload(self, baseid, nodeid):
-#        if nodeid not in self.logSize.keys(): #This means not started yet. 
-#            self.downloadCommandController(baseid, nodeid)
-#        else:
-#            if self.logSize[nodeid] > 0:
-#                if self.moteLogSize[nodeid] != self.logSize[nodeid]: # this means still downloading...
-#                    self.downloadMaxTry[nodeid] = 0
-#                    self.moteLogSize[nodeid] = self.logSize[nodeid]
-#                else:
-#                    self.downloadMaxTry[nodeid] += 1
-#                    if self.downloadMaxTry[nodeid] > 2: # greater than 3 time trials, give up for the mote
-#                        self.startNextDownload(baseid) #give up and move onto the next
-#                    else:
-#                        self.downloadCommandBaseStation(baseid, nodeid)
-#            else:
-#                if nodeid in self.f.keys():
-#                    self.f[nodeid].flush()
-#                    self.f[nodeid].close()
-#                    del self.f[nodeid]
-#                sys.stdout.write("%d Download Done\n" % (nodeid,))
-#                sys.stdout.flush()
-#                self.startNextDownload(baseid)                
 
     def checkCurrentDownload(self, baseid, nodeid):
-	### Gavin ###
-	if not __debug__:
-	    print "CHECKCURRENTDOWNLOAD::Entered"
-	############
         if nodeid not in self.logSize.keys(): #This means not started yet. 
             self.downloadCommandController(baseid, nodeid)
         else:
@@ -342,14 +301,15 @@ class CmdCenter:
                 self.startNextDownload(baseid)                
 
     def startNextDownload(self, baseid):
-
+	# If there could be another node to download, get it's id
         nodeid = self.getNextDownload()
-	
 
-        if nodeid > 0:
+	# If it's a valid nodeid proceed.
+	#    note: that we can't get an id of 0
+        if nodeid > 0: 
             if not self.existDownload(nodeid): #if it is not already downloading...
-                self.basestations[baseid] = nodeid
-                self.downloadMaxTry[nodeid] = 0
+                self.basestations[baseid] = nodeid # Map the downloader to the new nodeid
+                self.downloadMaxTry[nodeid] = 0 # Set download tries to 0
                 self.moteLogSize[nodeid] = 0
                 self.downloadCommandController(baseid, nodeid) # send the download command to Controller
             else:
@@ -358,6 +318,8 @@ class CmdCenter:
 
                 if nodeid != DOWNLOAD_END:
                     self.startNextDownload(baseid)
+	elif nodeid == DOWNLOAD_END: # Note that DOWNLOAD_END == -1
+	    return;
 
     def downloadData(self):
 
@@ -365,17 +327,18 @@ class CmdCenter:
         self.printDownloadMapping()
 
         if not self.isBusy:
-	    
             self.isBusy = True
-
+	    
+	    # For every downloader, and node ready for download.
             for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
-
+		# If we ever get a DOWNLOAD_STOP return right away.
                 if self.downloadState == DOWNLOAD_STOP:
                     return
-
+		# If the node is a commander (nodeid == 0) then startNextDownload
                 if nodeid == 0:
                     self.startNextDownload(baseid)
                 else:
+		    # If not the commander check on the current download in progress
                     self.checkCurrentDownload(baseid, nodeid) #check to see if the download is still in progress
 
             self.isBusy = False    
@@ -387,37 +350,40 @@ class CmdCenter:
                 
     def downloadCommandController(self, channel, nodeid):
 
-        #self.resetDownloadTimer()
+	# If the max try is still less than MAX_TRY (10)
         if self.downloadMaxTry[nodeid] < DOWNLOAD_MAX_TRY:
             if self.downloadState == DOWNLOAD_STOP:
                 self.resetDownloadMaxTry(nodeid)
                 return;
 
-            if nodeid not in self.logSize.keys():
-                print("send download command to Controller ..")
+            if nodeid not in self.logSize.keys(): # If nodeid hasn't been logged
+                print("send download command to Controller ..") # Then send a message!
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_DOWNLOAD)
                 msg.set_dst(channel)
                 msg.set_channel(channel)
                 
                 print (channel, nodeid)
+		# Send download command from commander to nodeid
+		#Self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
-                self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-
-            else:
+            else: # If the message was already sent
                 self.printWrite("download start: %s, channel: %s, nodeid: %s\n"%(time.ctime(), channel, nodeid))
                 self.printFlush()
                 self.resetDownloadMaxTry(nodeid)
                 return
             
+	    # Temporary placement here, to see if it works better... Gavin
+            self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             self.downloadMaxTry[nodeid] += 1
         else:
-            self.resetDownloadMaxTry(nodeid)
-            self.startNextDownload(channel)
+            self.resetDownloadMaxTry(nodeid) # Reset the max try for the nodeid
+            self.startNextDownload(channel) # Note that channel was the downloader id
 
 
+    # Gavin Observation: I've never actually seen this function run before...
     def downloadCommandBaseStation(self, baseid, nodeid):
-        #self.resetDownloadTimer()
+	# If less than max try for download attempts
         if self.downloadMaxRetry[nodeid] < DOWNLOAD_MAX_RETRY:
             if self.downloadState == DOWNLOAD_STOP:
                 self.resetDownloadMaxReTry(nodeid)
@@ -444,14 +410,7 @@ class CmdCenter:
                         self.startNextDownload(baseid)
                         return
                     else:
-                        #self.resetDownloadTimer()
-                        #self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
                         self.mif[baseid].sendMsg(self.tos_source[baseid], baseid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                        #self.downloadTimer.reset()
-                        #time.sleep(1)
-                        #self.mif[baseid].sendMsg(self.tos_source[baseid], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                        #self.mif[baseid].sendMsg(self.tos_source[baseid], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-                        #self.downloadTimer.reset()
                 else:
                     self.moteLogSize[nodeid] = self.logSize[nodeid]
                     self.printWrite("download restart: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
@@ -462,7 +421,6 @@ class CmdCenter:
             
             self.downloadMaxRetry[nodeid] += 1
 
-        #time.sleep(1)
 
     def finishDownload(self, baseid, nodeid):
         print "download done for node id", nodeid
@@ -496,8 +454,8 @@ class CmdCenter:
             self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
     
     def resetDownloadMaxTry(self, nodeid):
-        #self.downloadMaxTry[nodeid] = 0
-        del self.downloadMaxTry[nodeid]
+        self.downloadMaxTry[nodeid] = 0
+        #del self.downloadMaxTry[nodeid]
 
     def resetDownloadMaxReTry(self, nodeid):
         #self.downloadMaxRetry[nodeid] = 0
@@ -558,26 +516,9 @@ class CmdCenter:
             print "logSize:", key, value
             
     def printDownloadMapping(self):
-
-	### Gavin ####
-	# Why does the following only print one baseid, nodeid pair?? Why does the for loop not iterate through all the nodes??
-	# If we know it will only do one node what is the point of the for loop?
-	#######################
-
+	#print every downloader, and node prepared for download
         for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
             print "mapping:", baseid, nodeid
-            
-#    def printStatus(self):
-#        keys = self.msgs.keys()
-#        keys.sort()
-#        for id in keys:
-#            m = self.msgs[id]
-#            sys.stdout.write("id: %4d, sensing: %d, local: %d, global: %d, isSync: %d, reboot: %d, bat: %.2f, logsize: %d, isErased: %d, download: %d, channel: %d,\n"%(m.get_src(), m.get_sensing(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboots(), m.get_bat()/4096.0*5, m.get_buffersize(), m.get_isErased(), m.get_download(), m.get_channel()))
-#        
-#        sys.stdout.write("%d messages received!\n"%(len(self.msgs)))
-#        sys.stdout.flush()
-#
-#        self.msgs = {}
 
     def printStatus(self):
         keys = self.msgs.keys()
@@ -683,13 +624,10 @@ class CmdCenter:
 
         self.help()
         
-        #self.scanMotes()
-        
         while 1:
 	    c = raw_input()
             self.downloadState = DOWNLOAD_START
             
-            #self.printWrite("%.3f, command: %s\n"%(time.time(), c))
             self.printWrite("%s, command: %s\n"%(time.ctime(), c))
             self.printFlush()
             
@@ -714,9 +652,6 @@ class CmdCenter:
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_STATUS)
                 msg.set_dst(102)
-                #msg.set_nodeId()
-                #msg.set_deploymentId()
-                #msg.set_syncPeriod()
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'w':
@@ -727,10 +662,6 @@ class CmdCenter:
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_BASESTATUS)
                 msg.set_dst(102)
-                #msg.set_dst(0xffff)
-                #msg.set_nodeId()
-                #msg.set_deploymentId()
-                #msg.set_syncPeriod()
                 for n in self.m.get_nodes():
                     msg.set_channel(n.id)
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
@@ -741,11 +672,9 @@ class CmdCenter:
                 # start sensing
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_START_SENSE)
-                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
-                #self.stopBlink(0xffff)
 
             elif c == 'b':
                 self.downloadState = DOWNLOAD_STOP
@@ -790,7 +719,6 @@ class CmdCenter:
                     continue
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_LOGSYNC)
-                #msg.set_dst(0xffff)
                 for n in self.m.get_nodes():
                     self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif len(c) > 1:
