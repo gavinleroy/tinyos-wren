@@ -69,7 +69,7 @@ class CmdCenter:
     progressLock = threading.RLock()
     
     f = {}
-    motes = []
+    motes = [] # LIST of motes
     
     basemsgs = {}
     wrenmsgs = {}
@@ -100,17 +100,15 @@ class CmdCenter:
         self.logger = Logger(basedir+"/download_log_stat.txt")
         
 
-	# Testing out this optimization for the motes. Gavin
-        # connecting serial forwarder for all nodes
         numberOfMotes = 0
         for n in self.m.get_nodes():
             sys.stdout.write("%d,%s "%(n.id, n.serial))
             numberOfMotes = numberOfMotes + 1
-#        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
-#        sys.stdout.flush()
+        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
+        sys.stdout.flush()
 
         # starting mote interfaces
-#        for n in self.m.get_nodes():
+        for n in self.m.get_nodes():
             baseFileName = "/tmp/sf"
             p = msp.ManagedSubproc("/usr/bin/java net.tinyos.sf.SerialForwarder -no-gui -port %d -comm serial@%s:tmote"%(20000+n.id, n.serial),
                     stdout_disk = baseFileName + ".%d.log"%(n.id,),
@@ -118,14 +116,9 @@ class CmdCenter:
                     stdout_fns = [ ])
             p.start()
             self.sfprocess[n.id] = p
-	### These lines were added from above...
-        sys.stdout.write("\n number of motes connected: %d\n" %(numberOfMotes))
-        sys.stdout.flush()
-
-	########################################
 
         # give it some time to establish all the serial forwarders
-        time.sleep(4) # I also changed this time from 3 to 4
+        time.sleep(4) # I also changed this time from 3 to 4 Gavin
 
         for n in self.m.get_nodes():
             #print n.id
@@ -329,7 +322,7 @@ class CmdCenter:
         if not self.isBusy:
             self.isBusy = True
 	    
-	    # For every downloader, and node ready for download.
+	    # For every downloader, and corresponding node ready for download.
             for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
 		# If we ever get a DOWNLOAD_STOP return right away.
                 if self.downloadState == DOWNLOAD_STOP:
@@ -516,7 +509,7 @@ class CmdCenter:
             print "logSize:", key, value
             
     def printDownloadMapping(self):
-	#print every downloader, and node prepared for download
+	#print every downloader, and the node it will download 
         for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
             print "mapping:", baseid, nodeid
 
@@ -620,6 +613,21 @@ class CmdCenter:
 	if not __debug__:
 	    print "____DEBUGGING ON____"
 
+    
+    def sendMessage(self, MSG_TYPE, nodeid=0xffff, channel=None, dst=None):
+
+	msg = CmdSerialMsg.CmdSerialMsg()
+	msg.set_cmd(MSG_TYPE)
+	msg.set_dst(nodeid)
+	if(dst is not None):
+	    msg.set_dst(dst)
+	for n in self.m.get_nodes():
+	    if(channel is not None):
+		msg.set_channel(channel)
+	    elif(channel is -1):
+		msg.set_channel(n.id)
+	    self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+
     def main_loop(self):
 
         self.help()
@@ -633,8 +641,7 @@ class CmdCenter:
             
             if c == 'p':
                 self.printMoteQueueDetail()
-            
-            if c == 'q':
+            elif c == 'q':
                 self.resetChannel()
                 for k in self.sfprocess.keys():
                     self.sfprocess[k].stop()
@@ -648,17 +655,13 @@ class CmdCenter:
             elif c == 's':
                 # get status
                 self.f.clear()
-                
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_STATUS)
-                msg.set_dst(102)
-                for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+       		self.sendMessage(CMD_STATUS)         
             elif c == 'w':
                 self.scanMotes()
                 self.setBaseStationChannel()
             elif c == 'f':
                 # get base status
+		self.sendMessage(channel=-1, dst=102)
                 msg = CmdSerialMsg.CmdSerialMsg()
                 msg.set_cmd(CMD_BASESTATUS)
                 msg.set_dst(102)
@@ -670,28 +673,20 @@ class CmdCenter:
                 self.resetChannel()
             elif c == 'g':
                 # start sensing
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_START_SENSE)
-                for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
-
-
+		self.sendMessage(CMD_START_SENSE);
             elif c == 'b':
                 self.downloadState = DOWNLOAD_STOP
-                self.stopSensing(0xffff)
+		self.sendMessage(CMD_STOP_SENSE)
             elif c == 't':
-                self.startBlink(0xffff)
+		self.sendMessage(CMD_START_BLINK)
             elif c == 'a':
-                self.stopBlink(0xffff)
+		self.sendMessage(CMD_STOP_BLINK)
             elif c == 'e':
                 c = raw_input("Are you sure you want to erase the data [y/n]")
                 if c != 'y':
                     print "Abort erase"
                     continue
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_ERASE)
-                for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		self.sendMessage(CMD_ERASE);
             elif c == 'd':
 		# Set mode to download all
                 self.downloadMode = DOWNLOAD_ALL
@@ -704,7 +699,7 @@ class CmdCenter:
 		# Give some time for the motes to settle down.
                 time.sleep(3)
 		# Make sure that sensing is off.
-		self.stopSensing(0xffff)
+		self.sendMessage(CMD_STOP_SENSE)
 
 		# Reset the download timer. When the timer expires (every 4 seconds)
 		# it will call the downloadData() function.
@@ -717,41 +712,30 @@ class CmdCenter:
                 if c != 'y':
                     print "Abort restore"
                     continue
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_LOGSYNC)
-                for n in self.m.get_nodes():
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		self.sendMessage(CMD_LOGSYNC)
             elif len(c) > 1:
                 if c[0] == 's' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
                     # get status
-                    msg = CmdSerialMsg.CmdSerialMsg()
-                    msg.set_cmd(CMD_STATUS)
-                    msg.set_dst(nodeid)
-                    for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		    self.sendMessage(CMD_STATUS, nodeid=nodeid)
                 elif c[0] == 'b' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
-                    self.stopSensing(nodeid)
+		    self.sendMessage(CMD_STOP_SENSE, nodeid=nodeid)
                 elif c[0] == 't' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
-                    self.startBlink(nodeid)
+		    self.sendMessage(CMD_START_BLINK, nodeid=nodeid)
                 elif c[0] == 'a' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
-                    self.stopBlink(nodeid)
+		    self.sendMessage(CMD_STOP_BLINK, nodeid=nodeid)
                 elif c[0] == 'g' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
                     # get status
-                    msg = CmdSerialMsg.CmdSerialMsg()
-                    msg.set_cmd(CMD_START_SENSE)
-                    msg.set_dst(nodeid)
-                    for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		    self.sendMessage(CMD_START_SENSE, nodeid=nodeid)
                 elif c[0] == 'e' and c[1] == ' ':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
@@ -760,11 +744,7 @@ class CmdCenter:
                     if c != 'y':
                         print "Abort erase"
                         continue
-                    msg = CmdSerialMsg.CmdSerialMsg()
-                    msg.set_cmd(CMD_ERASE)
-                    msg.set_dst(nodeid)
-                    for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		    self.sendMessage(CMD_ERASE, nodeid=nodeid)
                 elif c[0] == 'd':
                     self.downloadMode = DOWNLOAD_SINGLE
                     # start download
@@ -777,7 +757,7 @@ class CmdCenter:
                     self.setBaseStationChannel()
 
                     time.sleep(3) #give sometime to settle down                
-                    self.stopSensing(nodeid)
+		    self.sendMessage(CMD_START_SENSE, nodeid=nodeid)
                     time.sleep(3) #give sometime to settle down                
 
                     if self.motes.count(nodeid) == 0:
@@ -788,22 +768,15 @@ class CmdCenter:
                 elif c[0] == 'r':
                     cs = c.strip().split(" ")
                     nodeid = int(cs[1])
-                    msg = CmdSerialMsg.CmdSerialMsg()
-                    msg.set_cmd(CMD_LOGSYNC)
-                    msg.set_dst(nodeid)
-                    for n in self.m.get_nodes():
-                        self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		    self.sendMessage(CMD_LOGSYNC, nodeid=nodeid)
 
             elif c == 'h':
                 self.help()
-	    else:
-		print("Input not recognized.")
 
 
 def main():
     cc = CmdCenter()
     cc.main_loop()  # don't expect this to return...
-
 
 if __name__ == "__main__":
     main()
