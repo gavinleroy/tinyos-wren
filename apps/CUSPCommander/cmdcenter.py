@@ -54,8 +54,6 @@ basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
     os.mkdir(basedir)
 
-
-
 class CmdCenter:
 
     mif = {}
@@ -358,7 +356,7 @@ class CmdCenter:
                 
                 print (channel, nodeid)
 		# Send download command from commander to nodeid
-		#Self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		Self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
             else: # If the message was already sent
                 self.printWrite("download start: %s, channel: %s, nodeid: %s\n"%(time.ctime(), channel, nodeid))
@@ -366,8 +364,6 @@ class CmdCenter:
                 self.resetDownloadMaxTry(nodeid)
                 return
             
-	    # Temporary placement here, to see if it works better... Gavin
-            self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
             self.downloadMaxTry[nodeid] += 1
         else:
             self.resetDownloadMaxTry(nodeid) # Reset the max try for the nodeid
@@ -433,75 +429,39 @@ class CmdCenter:
         self.printDownloadMapping()
 
     def scanMotes(self):
-        msg = CmdSerialMsg.CmdSerialMsg()
-        msg.set_cmd(CMD_WREN_STATUS)
-        msg.set_dst(102)
-        for n in self.m.get_nodes():
-            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+	self.sendMessage(CMD_WREN_STATUS, dst=102);
 
     def scanBaseStations(self):
-        msg.set_cmd(CMD_BASESTATUS)
-        msg.set_dst(102)
-        for n in self.m.get_nodes():
-            msg.set_channel(n.id)
-            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+	self.sendMessage(CMD_BASESTATUS, channel=-1, dst=102)
     
     def resetDownloadMaxTry(self, nodeid):
         self.downloadMaxTry[nodeid] = 0
         #del self.downloadMaxTry[nodeid]
 
     def resetDownloadMaxReTry(self, nodeid):
-        #self.downloadMaxRetry[nodeid] = 0
-        del self.downloadMaxRetry[nodeid]
+        self.downloadMaxRetry[nodeid] = 0
+#        del self.downloadMaxRetry[nodeid]
         
     def resetChannel(self):
-        # set base channels
-        msg = CmdSerialMsg.CmdSerialMsg()
-        msg.set_cmd(CMD_CHANNEL_RESET)
-        msg.set_dst(0xffff)
-        for n in self.m.get_nodes():
-            msg.set_channel(11)
-            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+	self.sendMessage(CMD_CHANNEL_RESET, channel=11, dst=0xffff)
 
     def stopSensing(self, nodeid):
-        # stop sensing
-        msg = CmdSerialMsg.CmdSerialMsg()
-        msg.set_cmd(CMD_STOP_SENSE)
-        #msg.set_dst(0xffff)
-        for n in self.m.get_nodes():
-            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+	self.sendMessage(CMD_STOP_SENSE)
 
     def startBlink(self, nodeid):
-        # stop sensing
-        msg = CmdSerialMsg.CmdSerialMsg()
-        msg.set_cmd(CMD_START_BLINK)
-        #msg.set_dst(0xffff)
-        for n in self.m.get_nodes():
-            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+	self.sendMessage(CMD_START_BLINK)
 
     def stopBlink(self, nodeid):
-        # stop sensing
-        msg = CmdSerialMsg.CmdSerialMsg()
-        msg.set_cmd(CMD_STOP_BLINK)
-        #msg.set_dst(0xffff)
-        for n in self.m.get_nodes():
-            self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
-
+	self.sendMessage(CMD_STOP_BLINK)
 
     def setBaseStationChannel(self):
-        msg = CmdSerialMsg.CmdSerialMsg()
-        msg.set_cmd(CMD_CHANNEL)
-        msg.set_dst(0xffff)
-        for n in self.m.get_nodes():
-            msg.set_channel(n.id)
-            self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+	self.sendMessage(CMD_CHANNEL, channel=-1, dst=0xffff)
 
     def resetDownloadTimer(self):
         with self.lock:
             if not self.downloadTimer.isAlive():
                 self.downloadTimer.start()
             self.downloadTimer.reset()
-            #self.downloadTimer.run()
 
             
     def printLogSize(self):
@@ -622,10 +582,10 @@ class CmdCenter:
 	if(dst is not None):
 	    msg.set_dst(dst)
 	for n in self.m.get_nodes():
-	    if(channel is not None):
-		msg.set_channel(channel)
-	    elif(channel is -1):
+	    if(channel is -1):
 		msg.set_channel(n.id)
+	    elif(channel is not None):
+		msg.set_channel(channel)
 	    self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
 
     def main_loop(self):
@@ -661,13 +621,13 @@ class CmdCenter:
                 self.setBaseStationChannel()
             elif c == 'f':
                 # get base status
-		self.sendMessage(channel=-1, dst=102)
-                msg = CmdSerialMsg.CmdSerialMsg()
-                msg.set_cmd(CMD_BASESTATUS)
-                msg.set_dst(102)
-                for n in self.m.get_nodes():
-                    msg.set_channel(n.id)
-                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
+		self.sendMessage(CMD_BASESTATUS, channel=-1, dst=102)
+#                msg = CmdSerialMsg.CmdSerialMsg()
+#                msg.set_cmd(CMD_BASESTATUS)
+#                msg.set_dst(102)
+#                for n in self.m.get_nodes():
+#                    msg.set_channel(n.id)
+#                    self.mif[n.id].sendMsg(self.tos_source[n.id], 0xffff, CmdSerialMsg.AM_TYPE, 0x22, msg)
             elif c == 'x':
                 self.downloadState = DOWNLOAD_STOP
                 self.resetChannel()
