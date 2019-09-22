@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+
+# Last edited by Gavin Gray at the University of Utah
+#	September 22, 2019
+#
+
 from mni import mni
 
 import os
@@ -50,6 +56,8 @@ DOWNLOAD_END        = -1
 DOWNLOAD_MAX_TRY    = 10
 DOWNLOAD_MAX_RETRY  = 10
 
+# Create directory for LOG file. All commands are written to this file.
+# Directories are named by the day of use.
 basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
     os.mkdir(basedir)
@@ -60,22 +68,28 @@ class CmdCenter:
     mif = {}
 
     sfprocess = {}
-    # Dictionary id:source instance
+    # Dictionary that maps id's to their source instances
     tos_source = {}
 
+    # Dictionary, mapping SerialStatusMSG sources to their messages. Used only for SerialStatus Messages
     msgs     = {}
-    logSize  = {} # moteid:logsize in the dictionary keeps track of data on the motes.
+    # Dictionary mapping moteid's to their logsizes
+    logSize  = {} 
     
     lock = threading.RLock()
     progressLock = threading.RLock()
     
     f = {}
-    motes = [] # List of motes connected
-    
+    # List of motes connected
+    motes = [] 
+    # Dictionary, mapping BaseStatus MSG sources to their messages. Used only for BaseStatus Messages
     basemsgs = {}
+    # Dictionary, mapping WREN MSG sources to their messages. Used only for WRENStatus Messages
     wrenmsgs = {}
+    # Dictionary, mapping WREN MSG sources to their messages. Used only for WRENConnection Messages
     wrenconnectionmsgs = {}
-    basestations = {} # Dictionary of {downloader, nodeid} pairs. Means downloader is currently working on nodeid
+    # Dictionary of {downloader, nodeid} pairs. Means downloader is currently working on nodeid
+    basestations = {} 
     
     moteLogSize = {}
     downloadMaxTry = defaultdict(int)
@@ -147,6 +161,7 @@ class CmdCenter:
     def receive(self, src, msg):
 
         if msg.get_amType() == RssiSerialMsg.AM_TYPE:
+	    print "RssiSerialMsg Received"  # Gavin
             m = RssiSerialMsg.RssiSerialMsg(msg.dataGet())
             if m.get_dst() == 0:
                 return;
@@ -170,6 +185,7 @@ class CmdCenter:
             self.f[m.get_dst()].write("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %.2f, %d\n"%(m.get_dst(), m.get_src(), m.get_counter(), m.get_rssi(), m.get_srclocaltime(), m.get_srcglobaltime(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboot(), m.get_bat()/4096.0*5, m.get_size()))
             self.f[m.get_dst()].flush()
                 
+	# Message is received when the status of the motes is requested
         if msg.get_amType() == SerialStatusMsg.AM_TYPE:
             with self.lock:
                 if not self.msgTimer.isAlive():
@@ -186,8 +202,8 @@ class CmdCenter:
                 f.write("%.3f, %d\n"%(time.time(), m.get_globaltime()))
                 f.close()
             
-
         if msg.get_amType() == WRENStatusMsg.AM_TYPE:
+	    print "WRENStatusMsg Received"  # Gavin
             with self.lock:
                 if not self.wrenTimer.isAlive():
                     self.wrenTimer.start()
@@ -200,6 +216,7 @@ class CmdCenter:
                 self.motes.append(m.get_src())
 
         if msg.get_amType() == WRENConnectionMsg.AM_TYPE:
+	    print "WRENConnectionMsg Received"  # Gavin
             with self.lock:
                 if not self.wrenConnectionTimer.isAlive():
                     self.wrenConnectionTimer.start()
@@ -209,6 +226,7 @@ class CmdCenter:
                 self.wrenconnectionmsgs[m.get_src()] = m
 
         if msg.get_amType() == WRENCloseMsg.AM_TYPE:
+	    print "WRENCloseMsg Received"  # Gavin
             with self.lock:
                 m = WRENCloseMsg.WRENCloseMsg(msg.dataGet())
 
@@ -222,6 +240,7 @@ class CmdCenter:
                 self.finishDownload(m.get_channel(), m.get_src())
                                 
         if msg.get_amType() == BaseStatusMsg.AM_TYPE:
+	    print "BaseStatusMsg Received"  # Gavin
             with self.lock:
                 if not self.basemsgTimer.isAlive():
                     self.basemsgTimer.start()
@@ -244,6 +263,7 @@ class CmdCenter:
                 break
         return cleared
 
+    # Unassociate mote with specified baseid
     def clearDownloadByBaseId(self, baseid):
         self.basestations[baseid] = 0
 
@@ -441,6 +461,8 @@ class CmdCenter:
             self.basestations[baseid] = 0
         self.printDownloadMapping()
 
+    # Send WREN status message to the motes
+    # WREN status is used for downloading
     def scanMotes(self):
 	self.sendMessage(CMD_WREN_STATUS, dst=102);
 
@@ -523,6 +545,7 @@ class CmdCenter:
 #
 #        self.wrenmsgs = {}
 
+    # 
     def printConnection(self):
         wrenkeys = self.wrenconnectionmsgs.keys()
         wrenkeys.sort()
@@ -556,10 +579,12 @@ class CmdCenter:
 	    # Send the message
 	    self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg) 
 
+    # Print the length of each mote queue. WREN motes that have data to download and Downloaders that are connected
     def printMoteQueues(self):
         print "***", len(self.motes), "client motes have data and queued for download"
         print "***", len(self.basestations), "download base stations are ready for download"
 
+    # Not only print the length of the mote queues but the contents as well.
     def printMoteQueueDetail(self):
         print "***", len(self.motes), "client motes have data and queued for download"
         print "client node id:"
@@ -571,14 +596,17 @@ class CmdCenter:
         for elem in self.basestations:
             print elem
 
+    # Print information to log file and stdout
     def printWrite(self, line):
         self.logger.write(line)
         sys.stdout.write(line)
 
+    # Print line to both the log file and stdout
     def printWriteLine(self, line):
         self.logger.writeLine(line)
         sys.stdout.write(line)
 
+    # Flushes both the logger and stdout output
     def printFlush(self):
         self.logger.flush()
         sys.stdout.flush()
@@ -626,16 +654,15 @@ class CmdCenter:
 		# 	and how many motes are ready for download.
                 self.printMoteQueueDetail()
             elif c == 'q':
+		print("A QUIT was requested")
 		# quits and safely exits the program
                 self.resetChannel()
                 for k in self.sfprocess.keys():
                     self.sfprocess[k].stop()
                     while self.sfprocess[k].is_dead():
                         time.sleep(1)
-                
                 if self.logger is not None:
                     self.logger.close()
-                    
                 break
             elif c == 's':
                 # get status
