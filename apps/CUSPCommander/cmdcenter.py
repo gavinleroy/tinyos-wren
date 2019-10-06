@@ -12,6 +12,8 @@ import time
 import optparse
 import threading
 
+import time # Added for timing the motes.
+
 from rtTimer import ResettableTimer
 
 from mni import managedsubproc as msp
@@ -64,6 +66,8 @@ if not os.path.exists(basedir):
 
 class CmdCenter:
     
+    avg_resp_times = []
+
     # Dictionary id:MoteIF instance. MoteIF can be found in MoteIF.py creates a mote instance
     mif = {}
 
@@ -82,7 +86,10 @@ class CmdCenter:
     f = {}
     # List of motes connected
     motes = [] 
+    # List of motes that failed to download, created by Gavin for the new downloadData(int x) method
+    failed_download = []
     # Dictionary, mapping BaseStatus MSG sources to their messages. Used only for BaseStatus Messages
+
     basemsgs = {}
     # Dictionary, mapping WREN MSG sources to their messages. Used only for WRENStatus Messages
     wrenmsgs = {}
@@ -99,13 +106,15 @@ class CmdCenter:
     def __init__(self):
         print "init"
 
+	self.StartTime = 0
+	
         self.dl = 0
         self.downloadMode = DOWNLOAD_ALL
         self.downloadState = DOWNLOAD_START
         
         self.isBusy = False
 
-	# Class found in mni.py
+	# Class found in mni.py ... use locate mni.py to find filepath on local machine.
         self.m = mni.MNI() # Initialize a Managed Node Infrastructure.
 
 	# Timers
@@ -118,7 +127,6 @@ class CmdCenter:
 	# Log file for all commands run.
         self.logger = Logger(basedir+"/download_log_stat.txt")
         
-
 	# Count number of motes in self.m 
         numberOfMotes = 0
         for n in self.m.get_nodes():
@@ -188,6 +196,7 @@ class CmdCenter:
 	# Message is received when the status of the motes is requested
         if msg.get_amType() == SerialStatusMsg.AM_TYPE:
             with self.lock:
+		self.avg_resp_times.append(time.time()-self.StartTime)
                 if not self.msgTimer.isAlive():
                     self.msgTimer.start()
                 self.msgTimer.reset()
@@ -203,6 +212,7 @@ class CmdCenter:
                 f.close()
             
         if msg.get_amType() == WRENStatusMsg.AM_TYPE:
+#	    self.avg_resp_times.append(time.time()-self.StartTime)
 	    print "WRENStatusMsg Received"  # Gavin
             with self.lock:
                 if not self.wrenTimer.isAlive():
@@ -217,6 +227,7 @@ class CmdCenter:
 
         if msg.get_amType() == WRENConnectionMsg.AM_TYPE:
 	    print "WRENConnectionMsg Received"  # Gavin
+       	    self.avg_resp_times.append(time.time()-self.StartTime)
             with self.lock:
                 if not self.wrenConnectionTimer.isAlive():
                     self.wrenConnectionTimer.start()
@@ -227,6 +238,7 @@ class CmdCenter:
 
         if msg.get_amType() == WRENCloseMsg.AM_TYPE:
 	    print "WRENCloseMsg Received"  # Gavin
+       	    self.avg_resp_times.append(time.time()-self.StartTime)
             with self.lock:
                 m = WRENCloseMsg.WRENCloseMsg(msg.dataGet())
 
@@ -267,6 +279,7 @@ class CmdCenter:
     def clearDownloadByBaseId(self, baseid):
         self.basestations[baseid] = 0
 
+    # Find if there exists a current download for nodeid
     def existDownload(self, nodeid):
         exist = False
 	# For every downloader
@@ -288,7 +301,7 @@ class CmdCenter:
 		#    do a quick scan to verify we have tried all of them.
                 if self.downloadMode == DOWNLOAD_ALL:
                     self.scanMotes() #find all motes out there
-                    time.sleep(3) # Wait for responses, Gavin modified this to be 4 seconds
+                    time.sleep(3) # Wait for responses
                     if len(self.motes) > 0: #if we have motes to download ...
                         nodeid = self.motes.pop()  # go ahead and pop one
         if nodeid == DOWNLOAD_END: # If the node ID didn't change we don't have any left
@@ -343,6 +356,18 @@ class CmdCenter:
 	elif nodeid == DOWNLOAD_END: # Note that DOWNLOAD_END == -1
 	    return;
 
+    def downloadData(self, x):
+	# Set up the mote queue
+	
+	#WHILE the queue is not empty
+	    #For each downloader
+	    # If status done -> next mote
+	    # If status failed -> save in output queue,
+	    #			  next mote
+	    # If status busy -> continue
+	    # WAIT for a little
+	pass
+
     def downloadData(self):
 
         print "downloadData mapping..."
@@ -352,7 +377,7 @@ class CmdCenter:
             self.isBusy = True
 	    
 	    # For every downloader, and corresponding node ready for download.
-            for baseid, nodeid in self.basestations.iteritems(): # we can optimize this lookup
+            for baseid in self.basestations: # we can optimize this lookup
 		# If we ever get a DOWNLOAD_STOP return right away.
                 if self.downloadState == DOWNLOAD_STOP:
                     return
@@ -577,6 +602,7 @@ class CmdCenter:
 	    elif(channel is not None):	  # If a channel was specified and it wasn't -1 then set it.
 		msg.set_channel(channel)
 	    # Send the message
+	    # Print out the n.id to make sure it is the commander sending the message
 	    self.mif[n.id].sendMsg(self.tos_source[n.id], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg) 
 
     # Print the length of each mote queue. WREN motes that have data to download and Downloaders that are connected
@@ -636,6 +662,33 @@ class CmdCenter:
 	if not __debug__:
 	    print "____DEBUGGING ON____"
 
+    def test_average_timing(self, msg_type, itrs=1):
+	self.downloadMode = DOWNLOAD_ALL
+	self.scanMotes()
+	self.setBaseStationChannel()
+	time.sleep(10)
+	for _ in range(itrs):
+		print "first"
+		for nodeid in self.motes:
+			print "second"
+			for baseid in self.basestations:
+				print "third"
+				self.StartTime = time.time()
+				msg = CmdSerialMsg.CmdSerialMsg()
+				msg.set_cmd(msg_type)
+				msg.set_dst(baseid)
+				msg.set_channel(baseid)
+				self.mif[0].sendMsg(self.tos_source[0], nodeid, CmdSerialMsg.AM_TYPE, 0x22, msg)
+				time.sleep(35)	
+	max_t = -1 
+	print "----- Printing Response Times -----"
+	for t in self.avg_resp_times:
+		max_t = t > max_t and t or max_t
+		print "\t" + str(t)
+	print "\nMax time: " + str(max_t)
+	print "Avg num of mote responses: " + str(len(self.avg_resp_times) / itrs)
+	print "-----------------------------------"
+	self.avg_resp_times = []
     
     def main_loop(self):
 
@@ -653,6 +706,8 @@ class CmdCenter:
 		# Reports the number of available Downloaders
 		# 	and how many motes are ready for download.
                 self.printMoteQueueDetail()
+	    elif c == 'z':
+		self.test_average_timing(CMD_DOWNLOAD)
             elif c == 'q':
 		print("A QUIT was requested")
 		# quits and safely exits the program
@@ -731,6 +786,9 @@ class CmdCenter:
                     nodeid = int(cs[1])
                     # get status
 		    self.sendMessage(CMD_STATUS, nodeid=nodeid)
+		elif c[0] == 'z' and c[1] == ' ':
+		    cs = c.strip().split(" ")
+		    self.test_average_timing(CMD_DOWNLOAD, itrs=int(cs[1]))
                 elif c[0] == 'b' and c[1] == ' ':
 		    # Stop sensing particular mote
                     cs = c.strip().split(" ")
