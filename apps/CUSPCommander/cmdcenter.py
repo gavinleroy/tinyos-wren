@@ -278,6 +278,13 @@ class CmdCenter:
 	    self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(nodeid), "a+")
 	    # Change the status of the mote to logfile opened 
 
+    def closeMoteLog(self, nodeid):
+	with self.lock:
+	    if nodeid in self.f.keys(): # if the id has a log open
+		self.f[nodeid].flush() # Clear the pipe
+		self.f[nodeid].close() # Close the file
+		del self.f[nodeid] # Delete the object from the dictionary
+
     def clearDownloadByNodeId(self, nodeid):
         cleared = False
         for baseid, value in self.basestations.iteritems(): # we can optimize this lookup
@@ -404,7 +411,10 @@ class CmdCenter:
 	
 	    time.sleep(10) # Wait 10 seconds in order to ensure that everything was completed okay
 	    self.downloadMaxTry[nodeid] += 1 # Increase the try count for the node
-	 
+
+	# No matter if the download was successful we want to make sure to close the log file 
+	# 	as to not corrupt it.
+	self.closeMoteLog(nodeid) 
 
 # This needs to happen with every mote to ENSURE that the logfile is closed 
 #	self.f[nodeid].flush()
