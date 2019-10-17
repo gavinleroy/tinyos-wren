@@ -183,6 +183,7 @@ class CmdCenter:
 #                    self.downloadTimer.start()
 #                self.downloadTimer.reset()
                 
+		# Add logsize to the dictionary, indicating that the downloadstarted
                 self.logSize[m.get_dst()] = m.get_size()
 
                 if (self.dl%200) == 0:
@@ -271,9 +272,11 @@ class CmdCenter:
                 self.basestations[m.get_src()] = 0
 
     def openMoteLog(self, nodeid):
-	sys.stdout.write(basedir+"/node_%d.log\n"%(nodeid))
-	self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(nodeid), "a+")
-	# Change the status of the mote to logfile opened 
+	# Remove concurrency to make sure that the self.f object always stays up-to-date
+	with self.lock:
+	    sys.stdout.write(basedir+"/node_%d.log\n"%(nodeid))
+	    self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(nodeid), "a+")
+	    # Change the status of the mote to logfile opened 
 
     def clearDownloadByNodeId(self, nodeid):
         cleared = False
@@ -372,24 +375,54 @@ class CmdCenter:
 	time.sleep(10)
 
     def handleMoteDownload(self, baseid, nodeid):
-	self.basestations[baseid] = nodeid  
-	self.download_status[baseid] = DOWN_NOT_STARTED
+	'''
+	The current status codes are:
+		- DOWN_NOT_STARTED
+		- DOWN_CURRENT
+		- DOWN_FINISHED
+	if the logSize of the nodeid is greater than zero, this means that the process has not completed yet
+	and we need to continue sending download signals to the mote.
+	'''
+	self.basestations[baseid] = nodeid # Associate Baseid with Nodeid that will be downloaded 
+	self.download_status[baseid] = DOWN_NOT_STARTED # Start the status as NOT STARTED
 
-	self.downloadMaxTry[nodeid] = 0 # Set download tries to 0
-	self.moteLogSize[nodeid] = 0
+	self.downloadMaxTry[nodeid] = 0 # Initialize the try count to 0 because nothing has been tried yet.
+	self.moteLogSize[nodeid] = 0 # Initialize LogSize to 0 because nothing has been downloaded yet.
 
+	# While the try count is less than MAX_TRY and status isn't FINISHED
+	# We will try to download, 
 	while self.downloadMaxTry[nodeid] < DOWNLOAD_MAX_TRY and self.download_status[baseid] != DOWN_FINISHED:
-	    # if not_started then send message
-	    # if is started
-	    continue
+	    # Complete action based on the current status of the mote.
+	    if self.download_status[baseid] == DOWN_NOT_STARTED:
+		# Need to implement logic
+	    elif self.download_status[baseid] == DOWN_CURRENT:
+		# Need to implement logic 
+	    elif self.download_status[baseid] == DOWN_FINISHED:
+		break
+	    else: # the download status was not recognized as a valid option, throw an error.
+		raise Exception("Download Status not recognized: Fatal Error.")
+	
+	    time.sleep(10) # Wait 10 seconds in order to ensure that everything was completed okay
+	    self.downloadMaxTry[nodeid] += 1 # Increase the try count for the node
+	 
 
 # This needs to happen with every mote to ENSURE that the logfile is closed 
 #	self.f[nodeid].flush()
 #	self.f[nodeid].close()
 #	del self.f[nodeid]
-	pass
+	return
 
     def _downloadData(self):
+	'''
+	This download method was created by Gavin Gray 10/2019,
+	any questions can be sent to gavinleroy6@gmail.com
+
+	This was created to ensure that all motes were downloaded and that the program
+	would never stall. It processes the downloads concurrently with as many threads as
+	there are downloaders connected. 
+
+	At the end of the function a report of which motes were NOT successfully downloaded is generated.
+	'''
 	# Find the basestations that are ready to download
         self.setBaseStationChannel()
 	# Set up the mote queue
@@ -403,12 +436,14 @@ class CmdCenter:
 	    for baseid in self.basestations:
 		# Make sure that the queue isn't empty
 		if self.motes:
-		    # Save the nodeid that will be downloaded
-		    nodeid = self.motes[-1]
-		    # Pop that mote off the stack, because it will be downloaded.
-		    self.motes.pop()
+		    nodeid = 0
+		    while nodeid == 0: # Make sure that we don't get a commander
+			# Save the nodeid that will be downloaded
+			nodeid = self.motes[-1]
+			# Pop that mote off the stack, because it will be downloaded.
+			self.motes.pop()
 		    # Add a thread to our current list of threads
-		    _threads.append(threading.Thread(target=self.test_threading, args=(baseid,nodeid,)))
+		    _threads.append(threading.Thread(target=self.handleMoteDownload, args=(baseid,nodeid,)))
 	    # Start all the threads
 	    for t in _threads:
 		t.start()
