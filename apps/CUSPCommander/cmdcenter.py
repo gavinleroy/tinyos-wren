@@ -64,6 +64,7 @@ basedir = time.strftime("%m-%d-%Y", time.localtime())
 if not os.path.exists(basedir):
     os.mkdir(basedir)
 
+
 class CmdCenter:
     
     avg_resp_times = []
@@ -97,6 +98,8 @@ class CmdCenter:
     wrenconnectionmsgs = {}
     # Dictionary of {downloader, nodeid} pairs. Means downloader is currently working on nodeid
     basestations = {} 
+    # Dictionary of baseid : moteidStatus to indicate how it's doing on the download.
+    download_status = {}
     
     moteLogSize = {}
     downloadMaxTry = defaultdict(int)
@@ -168,6 +171,7 @@ class CmdCenter:
     # Whenever a message is received from a mote this function is called.
     def receive(self, src, msg):
 
+        # Message to start a download of a mote.
         if msg.get_amType() == RssiSerialMsg.AM_TYPE:
 	    print "RssiSerialMsg Received"  # Gavin
             m = RssiSerialMsg.RssiSerialMsg(msg.dataGet())
@@ -175,9 +179,9 @@ class CmdCenter:
                 return;
             
             with self.lock:
-                if not self.downloadTimer.isAlive():
-                    self.downloadTimer.start()
-                self.downloadTimer.reset()
+#                if not self.downloadTimer.isAlive():
+#                    self.downloadTimer.start()
+#                self.downloadTimer.reset()
                 
                 self.logSize[m.get_dst()] = m.get_size()
 
@@ -188,8 +192,9 @@ class CmdCenter:
 
 
             if m.get_dst() not in self.f.keys():
-                sys.stdout.write(basedir+"/node_%d.log\n"%(m.get_dst()))
-                self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(m.get_dst()), "a+")
+		self.openMoteLog(m.get_dst())
+#                sys.stdout.write(basedir+"/node_%d.log\n"%(m.get_dst()))
+#                self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(m.get_dst()), "a+")
             self.f[m.get_dst()].write("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %.2f, %d\n"%(m.get_dst(), m.get_src(), m.get_counter(), m.get_rssi(), m.get_srclocaltime(), m.get_srcglobaltime(), m.get_localtime(), m.get_globaltime(), m.get_isSynced(), m.get_reboot(), m.get_bat()/4096.0*5, m.get_size()))
             self.f[m.get_dst()].flush()
                 
@@ -264,6 +269,11 @@ class CmdCenter:
             # collect all base stations out there
             if m.get_src() not in self.basestations.keys():
                 self.basestations[m.get_src()] = 0
+
+    def openMoteLog(self, nodeid):
+	sys.stdout.write(basedir+"/node_%d.log\n"%(nodeid))
+	self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(nodeid), "a+")
+	# Change the status of the mote to logfile opened 
 
     def clearDownloadByNodeId(self, nodeid):
         cleared = False
@@ -356,17 +366,57 @@ class CmdCenter:
 	elif nodeid == DOWNLOAD_END: # Note that DOWNLOAD_END == -1
 	    return;
 
-    def downloadData(self, x):
-	# Set up the mote queue
-	
-	#WHILE the queue is not empty
-	    #For each downloader
-	    # If status done -> next mote
-	    # If status failed -> save in output queue,
-	    #			  next mote
-	    # If status busy -> continue
-	    # WAIT for a little
+
+    def test_threading(self, baseid, x):
+	print "thread started: " + str(baseid) + " : " + str(x)
+	time.sleep(10)
+
+    def handleMoteDownload(self, baseid, nodeid):
+	self.basestations[baseid] = nodeid  
+	self.download_status[baseid] = DOWN_NOT_STARTED
+
+	self.downloadMaxTry[nodeid] = 0 # Set download tries to 0
+	self.moteLogSize[nodeid] = 0
+
+	while self.downloadMaxTry[nodeid] < DOWNLOAD_MAX_TRY and self.download_status[baseid] != DOWN_FINISHED:
+	    # if not_started then send message
+	    # if is started
+	    continue
+
+# This needs to happen with every mote to ENSURE that the logfile is closed 
+#	self.f[nodeid].flush()
+#	self.f[nodeid].close()
+#	del self.f[nodeid]
 	pass
+
+    def _downloadData(self):
+	# Find the basestations that are ready to download
+        self.setBaseStationChannel()
+	# Set up the mote queue
+	self.scanMotes()	
+	# Wait for previous processes to finish 
+	time.sleep(10)
+	#WHILE the queue is not empty
+	while self.motes:
+	    _threads = list()
+	    # Prepare the individual threads for downloading
+	    for baseid in self.basestations:
+		# Make sure that the queue isn't empty
+		if self.motes:
+		    # Save the nodeid that will be downloaded
+		    nodeid = self.motes[-1]
+		    # Pop that mote off the stack, because it will be downloaded.
+		    self.motes.pop()
+		    # Add a thread to our current list of threads
+		    _threads.append(threading.Thread(target=self.test_threading, args=(baseid,nodeid,)))
+	    # Start all the threads
+	    for t in _threads:
+		t.start()
+	    # Join all the threads
+	    for t in _threads:
+		t.join()
+	print "RETURNING FROM TEST DOWNLOAD"
+	return
 
     def downloadData(self):
 
@@ -754,6 +804,12 @@ class CmdCenter:
                     continue
 		self.sendMessage(CMD_ERASE);
             elif c == 'd':
+		# Testing for New DownlaodFunction Gavin
+		if not __debug__:
+		    self._downloadData()
+		    continue
+			
+		
 		# Set mode to download all
                 self.downloadMode = DOWNLOAD_ALL
 
