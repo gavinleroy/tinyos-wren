@@ -11,6 +11,7 @@ import sys
 import time
 import optparse
 import threading
+from itertools import islice
 
 import time # Added for timing the motes.
 
@@ -71,8 +72,6 @@ if not os.path.exists(basedir):
 
 class CmdCenter:
     
-    avg_resp_times = []
-
     # Dictionary id:MoteIF instance. MoteIF can be found in MoteIF.py creates a mote instance
     mif = {}
 
@@ -96,6 +95,9 @@ class CmdCenter:
 
     # List of motes connected
     motes = [] 
+
+    # List of motes to be downloaded
+    motes_to_download = []
 
     # List of motes that failed to download, created by Gavin for the new downloadData(int x) method
     failed_download = []
@@ -139,6 +141,8 @@ class CmdCenter:
         self.msgTimer = ResettableTimer(3, self.printStatus)
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
         self.wrenConnectionTimer = ResettableTimer(2, self.printConnection)
+
+	# If the new download process works we no longer have a need for the downloadTimer
         self.downloadTimer = ResettableTimer(3, self.downloadData)
 
 	# Log file for all commands run.
@@ -165,7 +169,7 @@ class CmdCenter:
         # give it some time to establish all the serial forwarders
         time.sleep(3) 
 
-	# Initialize mote instances with their ID's and save the source to the id.
+	# Initialize node instances with their ID's and save the source to the id.
         for n in self.m.get_nodes():
             self.mif[n.id] = MoteIF.MoteIF()
 	    # Add the source of each node to its id.
@@ -184,26 +188,20 @@ class CmdCenter:
 
     # Whenever a message is received from a mote this function is called.
     def receive(self, src, msg):
-        # Message to start a download of a mote.
+        # Message download packet from the motes
         if msg.get_amType() == RssiSerialMsg.AM_TYPE:
             m = RssiSerialMsg.RssiSerialMsg(msg.dataGet())
             if m.get_dst() == 0:
                 return;
             
-	    # We need to be careful with how much we add to this lock block.
-	    #     we only want to add what is necessary because it does remove concurrency.
+	    print "LOG SIZE OF RECEIVED MESSAGE IS -> " + str(m.get_size())
+
             with self.lock:
-		# Because the nodeid isn't in the the dictionary yet
-		#    that means that this is the first message received.
-    		if m.get_dst() not in self.logsize.keys():
-		    self.downloadMaxTry[m.get_dst()] = 0 # reset number of download tries
-		    # NOTE THAT if this doesn't work we should put it in the openMoteLog method
-		    self.download_status[m.get_dst()] = DOWN_CURRENT # set the status to currently downloading
-		if m.get_size() == 0:
-		    self.download_status[m.get_dst()] = DOWN_FINISHED
-		    
 		# Add logsize to the dictionary, indicating that the download started
                 self.logSize[m.get_dst()] = m.get_size() # now we add the node to the logsize dictionary
+
+		if m.get_size() > 0:
+		    self.downloadMaxTry[m.get_dst()] = 0 # Reset the download tries
 
                 if (self.dl%200) == 0:
                     sys.stdout.write(".")
@@ -220,7 +218,6 @@ class CmdCenter:
 	# Message is received when the status of the motes is requested
         if msg.get_amType() == SerialStatusMsg.AM_TYPE:
             with self.lock:
-		self.avg_resp_times.append(time.time()-self.StartTime)
                 if not self.msgTimer.isAlive():
                     self.msgTimer.start()
                 self.msgTimer.reset()
@@ -236,7 +233,6 @@ class CmdCenter:
                 f.close()
             
         if msg.get_amType() == WRENStatusMsg.AM_TYPE:
-#	    self.avg_resp_times.append(time.time()-self.StartTime)
             with self.lock:
                 if not self.wrenTimer.isAlive():
                     self.wrenTimer.start()
@@ -249,7 +245,6 @@ class CmdCenter:
                 self.motes.append(m.get_src())
 
         if msg.get_amType() == WRENConnectionMsg.AM_TYPE:
-       	    self.avg_resp_times.append(time.time()-self.StartTime)
             with self.lock:
                 if not self.wrenConnectionTimer.isAlive():
                     self.wrenConnectionTimer.start()
@@ -258,19 +253,15 @@ class CmdCenter:
                 m = WRENConnectionMsg.WRENConnectionMsg(msg.dataGet())
                 self.wrenconnectionmsgs[m.get_src()] = m
 
+	# Downloading Finished
         if msg.get_amType() == WRENCloseMsg.AM_TYPE:
-       	    self.avg_resp_times.append(time.time()-self.StartTime)
             with self.lock:
                 m = WRENCloseMsg.WRENCloseMsg(msg.dataGet())
 
             if m.get_close() == 1:
-                self.printWrite("connection and file closed: %s, nodeid: %s\n"%(time.ctime(), m.get_src()))
-                self.printFlush()
-                if m.get_src() in self.f.keys():
-                    self.f[m.get_src()].flush()
-                    self.f[m.get_src()].close()
-                    del self.f[m.get_src()]
-                self.finishDownload(m.get_channel(), m.get_src())
+		with self.lock:
+		    # SET THE DOWNLOAD STATUS TO FINISHED
+		    self.download_status[m.get_src()] = DOWN_FINISHED
                                 
         if msg.get_amType() == BaseStatusMsg.AM_TYPE:
             with self.lock:
@@ -289,15 +280,19 @@ class CmdCenter:
 	'''
 	Method opens a file for the given nodeid in order for us to write the downloaded data.
 	'''
+	print "Open Mote Log Called"
 	with self.lock:
-	    sys.stdout.write(basedir+"/node_%d.log\n"%(nodeid))
-	    self.f[m.get_dst()] = open(basedir+"/node_%d.log"%(nodeid), "a+")
+	    if nodeid in self.basestations.values():
+		self.download_status[nodeid] = DOWN_CURRENT
+		sys.stdout.write(basedir+"/node_%d.log\n"%(nodeid))
+		self.f[nodeid] = open(basedir+"/node_%d.log"%(nodeid), "a+")
 
     def closeMoteLog(self, nodeid):
 	'''
 	Method closes the file for the given nodeid IF it existed. 
 	After closing we want to delete it from the dictionary to keep small quantities.
 	'''
+	print "Close Mote Log Called"
 	with self.lock:
 	    if nodeid in self.f.keys(): # if the id has a log open
 		self.f[nodeid].flush() # Clear the pipe
@@ -306,7 +301,7 @@ class CmdCenter:
 
     def clearDownloadByNodeId(self, nodeid):
         cleared = False
-        for baseid, value in self.basestations.iteritems(): # we can optimize this lookup
+        for baseid, value in self.basestations.iteritems(): 
             if value == nodeid:
                 self.basestations[baseid] = 0
                 
@@ -400,7 +395,7 @@ class CmdCenter:
 	Start Mote Download handles the process of initiating the download process with the mote.
 	It sends the download command signal from the commander to the target node.
 	'''
-	print(str(self.downloadMaxTry[nodeid]) + "attempt to start download for mote " + str(nodeid)) # Then send a message!
+	print(str(self.downloadMaxTry[nodeid]) + " attempt to start download for mote " + str(nodeid)) # Then send a message!
 	msg = CmdSerialMsg.CmdSerialMsg()
 	msg.set_cmd(CMD_DOWNLOAD)
 	msg.set_dst(baseid)
@@ -413,7 +408,7 @@ class CmdCenter:
 	Continue Mote Download handles the process of actually downloading the data from the motes.
 	The downloader communicates with the target mote in order to fully gather all the data.
 	'''
-	print("Gathering data from mote " + str(nodeid))
+	print(str(self.downloadMaxTry[nodeid]) + " Gathering data from mote " + str(nodeid))
 	msg = CmdSerialMsg.CmdSerialMsg()
 	msg.set_cmd(CMD_DOWNLOAD)
 	msg.set_dst(nodeid)
@@ -429,34 +424,57 @@ class CmdCenter:
 	if the logSize of the nodeid is greater than zero, this means that the process has not completed yet
 	and we need to continue sending download signals to the mote.
 	'''
-	self.basestations[baseid] = nodeid # Associate Baseid with Nodeid that will be downloaded 
-	self.download_status[baseid] = DOWN_NOT_STARTED # Start the status as NOT STARTED
-
-	self.downloadMaxTry[nodeid] = 0 # Initialize the try count to 0 because nothing has been tried yet.
-	#self.moteLogSize[nodeid] = 0 # Initialize LogSize to 0 because nothing has been downloaded yet.
+	with self.lock:
+	    self.basestations[baseid] = nodeid # Associate Baseid with Nodeid that will be downloaded 
+	    self.download_status[nodeid] = DOWN_NOT_STARTED # Start the status as NOT STARTED
+	    self.downloadMaxTry[nodeid] = 0 # Initialize the try count to 0. 
 
 	# While the try count is less than MAX_TRY and status isn't FINISHED
 	# We will try to download, 
-	while self.downloadMaxTry[nodeid] < DOWNLOAD_MAX_TRY and self.download_status[baseid] != DOWN_FINISHED:
+	while self.downloadMaxTry[nodeid] < DOWNLOAD_MAX_TRY and self.download_status[nodeid] != DOWN_FINISHED:
+
+	    print "Download status for the mote: " + str(self.download_status[nodeid])
+
 	    # Complete action based on the current status of the mote.
-	    if self.download_status[baseid] == DOWN_NOT_STARTED:
-		startMoteDownload(baseid, nodeid)
-	    elif self.download_status[baseid] == DOWN_CURRENT:
-		continueMoteDownload(baseid, nodeid)
-	    elif self.download_status[baseid] == DOWN_FINISHED:
+	    if self.download_status[nodeid] == DOWN_NOT_STARTED:
+#		self.startMoteDownload(baseid, nodeid)
+		self.continueMoteDownload(baseid, nodeid)
+	    elif self.download_status[nodeid] == DOWN_CURRENT:
+#		self.startMoteDownload(baseid, nodeid)
+		self.continueMoteDownload(baseid, nodeid)
+	    elif self.download_status[nodeid] == DOWN_FINISHED:
 		break
 	    else: # the download status was not recognized as a valid option, throw an error.
 		raise Exception("Download Status not recognized: Fatal Error.")
 	
 	    time.sleep(10) # Wait 10 seconds in order to ensure that everything was completed okay
-	    self.downloadMaxTry[nodeid] += 1 # Increase the try count for the node
+	    with self.lock:
+	        self.downloadMaxTry[nodeid] += 1 # Increase the try count for the node
 
 	# No matter if the download was successful we want to make sure to close the log file 
 	# 	as to not corrupt it.
-	self.closeMoteLog(nodeid) 
+	self.finishDownload(baseid, nodeid)
 	return
 
-    def _downloadData(self):
+    def moteThreadStart(self, baseid, motes):
+	'''
+	This method is the outer layer of each downloading thread.
+	It will be responsible for associating a baseid with a nodeid and
+	ensuring that all the motes get downloaded successfully, if not, the
+	nodeid's should be appended to the list of unsuccessful downloads.
+	'''
+
+	while motes:
+	    nodeid = 0
+	    while nodeid == 0: # Make sure that we don't get a commander
+		# Save the nodeid that will be downloaded
+		nodeid = motes[-1]
+		# Pop that mote off the stack, because it will be downloaded.
+		motes.pop()
+	    self.handleMoteDownload(baseid, nodeid)	
+
+
+    def _downloadData(self, motes):
 	'''
 	This download method was created by Gavin Gray 10/2019,
 	any questions can be sent to gavinleroy6@gmail.com
@@ -465,36 +483,40 @@ class CmdCenter:
 	would never stall. It processes the downloads concurrently with as many threads as
 	there are downloaders connected. 
 
-	CURRENTLY THIS FUNCTIONALITY IS NOT IMPLIMENTED
-	**At the end of the function a report of which motes were NOT successfully downloaded is generated.
+	parameters:
+	-    motes: a list of all the motes that should be downloaded. The list is passed as a parameter
+		    which allows the download of a specific subset of the moets.
 	'''
-	# Find the basestations that are ready to download
-        self.setBaseStationChannel()
-	# Set up the mote queue
-	self.scanMotes()	
-	# Wait for previous processes to finish 
-	time.sleep(10)
-	#WHILE the queue is not empty
-	while self.motes:
-	    _threads = list()
-	    # Prepare the individual threads for downloading
-	    for baseid in self.basestations:
-		# Make sure that the queue isn't empty
-		if self.motes:
-		    nodeid = 0
-		    while nodeid == 0: # Make sure that we don't get a commander
-			# Save the nodeid that will be downloaded
-			nodeid = self.motes[-1]
-			# Pop that mote off the stack, because it will be downloaded.
-			self.motes.pop()
-		    # Add a thread to our current list of threads
-		    _threads.append(threading.Thread(target=self.handleMoteDownload, args=(baseid,nodeid,)))
-	    # Start all the threads
-	    for t in _threads:
-		t.start()
-	    # Join all the threads
-	    for t in _threads:
-		t.join()
+
+	print "Arrived in downloadDatatata"
+	lens = [len(motes)//len(self.basestations) for _ in range(len(self.basestations)-1)]
+	lens.append((len(motes)//len(self.basestations)) + len(motes)%len(self.basestations))
+
+#	lens = [0 for _ in range(len(self.basestations)-1)]
+#	lens.append(1)
+
+#	print len(motes)
+#	print len(self.basestations)
+#	print lens
+#	print "Returning"
+#	return
+	_motes = iter(motes)
+	mote_lists = [list(islice(_motes, x)) for x in lens]
+
+	_threads = list()
+	# Prepare the individual threads for downloading
+	for baseid, _mt in zip(self.basestations.keys(), mote_lists):
+	    print "Thread created for : " + str(baseid) + " to handle motes:"
+	    print _mt
+	    # Add a thread to our current list of threads
+	    _threads.append(threading.Thread(target=self.moteThreadStart, args=(baseid,_mt,)))
+	# Start all the threads
+	for t in _threads:
+	    t.start()
+	# Join all the threads
+	for t in _threads:
+	    t.join()
+	
 	print "RETURNING FROM TEST DOWNLOAD"
 	return
 
@@ -598,17 +620,23 @@ class CmdCenter:
             
             self.downloadMaxRetry[nodeid] += 1
 
-
+    # Gavin's version of the finishDownload method.
     def finishDownload(self, baseid, nodeid):
-        print "download done for node id", nodeid
-        self.basestations[baseid] = 0
         self.printWrite("download end: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
         self.printFlush()
-        with self.lock:
-            self.downloadTimer.reset()
+	self.closeMoteLog(nodeid)
 
-        if self.downloadMode == DOWNLOAD_ALL:
-            self.downloadData()
+#    Old finishDownload Function
+#    def finishDownload(self, baseid, nodeid):
+#        print "download done for node id", nodeid
+#        self.basestations[baseid] = 0
+#        self.printWrite("download end: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
+#        self.printFlush()
+#        with self.lock:
+#            self.downloadTimer.reset()
+#
+#        if self.downloadMode == DOWNLOAD_ALL:
+#            self.downloadData()
 
     def clearDownloadAll(self):
         print "clear mapping..."
@@ -712,6 +740,23 @@ class CmdCenter:
         sys.stdout.flush()
 
     	self.wrenconnectionmsgs = {}
+
+
+    def time_elapsed(self,start_time, end_time):
+	'''
+	Calculates the time elapsed and displays in Days, Hours, Minutes, Seconds.
+	First parameter is the start time, second is the end time.
+	'''
+	total_time = end_time - start_time
+
+	days = total_time // 86400
+	total_time = total_time%86400
+
+	hours = total_time // 3600
+	minutes = (total_time % 3600) // 60
+	seconds = ((total_time % 3600)%60)
+
+	print("Time Elapsed: \nD:%d, \nH:%d, \nM:%d, \nS:%d"%(days,hours,minutes,seconds))
 
     def sendMessage(self, MSG_TYPE, nodeid=0xffff, channel=None, dst=None):
 	'''
@@ -822,9 +867,12 @@ class CmdCenter:
                     self.logger.close()
                 break
             elif c == 's':
+		start_time = time.time()
                 # get status
                 self.f.clear()
        		self.sendMessage(CMD_STATUS)         
+		end_time = time.time()
+
             elif c == 'w':
                 self.scanMotes()
                 self.setBaseStationChannel()
@@ -856,11 +904,6 @@ class CmdCenter:
                     continue
 		self.sendMessage(CMD_ERASE);
             elif c == 'd':
-		# Testing for New DownlaodFunction Gavin
-		if not __debug__:
-		    self._downloadData()
-		    continue
-			
 		# Set mode to download all
                 self.downloadMode = DOWNLOAD_ALL
 
@@ -876,8 +919,11 @@ class CmdCenter:
 
 		# Reset the download timer. When the timer expires (every 4 seconds)
 		# it will call the downloadData() function.
-		self.resetDownloadTimer()
-		self.downloadData()
+		if not __debug__:
+		    self._downloadData(self.motes)
+		else:
+		    self.resetDownloadTimer()
+		    self.downloadData()
 
             elif c == 'r':
                 # restore log
@@ -937,13 +983,20 @@ class CmdCenter:
                     self.setBaseStationChannel()
 
                     time.sleep(3) #give sometime to settle down                
-		    self.sendMessage(CMD_START_SENSE, nodeid=nodeid)
+		    self.sendMessage(CMD_STOP_SENSE, nodeid=nodeid)
                     time.sleep(3) #give sometime to settle down                
 
                     if self.motes.count(nodeid) == 0:
                         self.motes.append(nodeid)
 
-                    self.downloadData()
+		    start_time = time.time()
+		    if not __debug__:
+		        self._downloadData([int(cs[1])])
+		    else:
+                        self.downloadData()
+		    end_time = time.time()
+
+		    self.time_elapsed(start_time, end_time)
                 elif c[0] == 'r':
 		    # Restore a particular mote
                     cs = c.strip().split(" ")
