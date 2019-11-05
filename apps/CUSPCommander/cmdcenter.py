@@ -149,9 +149,6 @@ class CmdCenter:
         self.wrenTimer = ResettableTimer(2, self.printMoteQueues)
         self.wrenConnectionTimer = ResettableTimer(2, self.printConnection)
 
-	# If the new download process works we no longer have a need for the downloadTimer
-        self.downloadTimer = ResettableTimer(3, self.downloadData)
-
 	# Log file for all commands run.
         self.logger = Logger(basedir+"/download_log_stat.txt")
         
@@ -348,7 +345,7 @@ class CmdCenter:
 	'''
         self.logger.write("download end: %s, channel: %s, nodeid: %s\n"%(time.ctime(), baseid, nodeid))
 	with self.lock:
-	    self.basestations[nodeid] = 0
+	    self.basestations[baseid] = 0
 	    del self.mote_base[nodeid]
         self.printFlush()
 	self.closeMoteLog(nodeid)
@@ -386,11 +383,8 @@ class CmdCenter:
     # Sends message to mote from downloader that requests data
     def moteDownloadDownloader(self, baseid, nodeid):
 	'''
-	moteDownloadDownloader sends a download message to the mote:nodeid from the downloader
-	in which it requests the return be sent to baseid(itself). 
-
-	This method has been problematic and I cannot get the sendMsg to work.
-	This method when used should be able to improve the concurrency and security of the download.
+	This method was copied from the original download process and I am still unsure what it is supposed to do.
+		I AM CURRENTLY NOT USING THIS METHOD.
 	'''
 	msg = CmdSerialMsg.CmdSerialMsg()
 	msg.set_cmd(CMD_DOWNLOAD)
@@ -420,12 +414,14 @@ class CmdCenter:
 	    try:
 	        # Complete action based on the current status of the mote.
 	        if self.download_status[nodeid] == DOWN_NOT_STARTED:
-		    self.prog_bars[baseid].update()
+		    self.prog_bars[baseid].update() # udpate saying that we sent a download requeset to mote.
 		    self.moteDownloadCommander(baseid, nodeid)
 	        elif self.download_status[nodeid] == DOWN_CURRENT:
+		    # For current downloads the progress bar is updated in the receive method
+		    #	when messages are received with data.
 		    self.moteDownloadCommander(baseid, nodeid)
 	        elif self.download_status[nodeid] == DOWN_FINISHED or self.download_status[nodeid] == DOWN_ERROR:
-		    break
+		    break # Break if download is finished or if ERROR was received.
 	        else: # the download status was not recognized as a valid option, throw an error.
 		    raise Exception("Download Status not recognized: Fatal Error.")
 	    except:
@@ -463,7 +459,7 @@ class CmdCenter:
 	are reported.
 	'''
 	while motes: # For all the given motes
-	    with self.lock:	
+	    with self.lock: # We need to lock because this list is shared amongst all threads.	
 		nodeid = 0
 		while nodeid == 0: # Make sure that we don't get a commander
 		    nodeid = motes[-1] # Save the nodeid to be downloaded
@@ -473,9 +469,11 @@ class CmdCenter:
 	    self.prog_bars[baseid].set_description('Initiaing Download %d : %d'%(baseid,nodeid))
 	    self.handleMoteDownload(baseid, nodeid) # Handle the download of the nodeid
 	    with self.lock:
-		self.prog_bars[0].update()
+		self.prog_bars[0].update() # The total download progress bar should be updated
+					   # 	to reflect the completed mote, whether successful or not.
 	    if self.download_status[nodeid] == DOWN_ERROR:
 		continue # We need to do something for the errors that will possibly fix the system
+	self.prog_bars[baseid].close() # Get rid of the progress bar now that the process is finished
 
     def _downloadData(self, motes):
 	'''
@@ -506,27 +504,41 @@ class CmdCenter:
 	# Join all the threads
 	for t in _threads:
 	    t.join()
-	# Close all the progress bars.
-	for pb in self.prog_bars.values():
-	    pb.close()
+	self.prog_bars[0].close()
+#	# Close all the progress bars.
+#	for pb in self.prog_bars.values():
+#	    pb.close()
 
-	self.f[-1].write("Number of failed downloads: %d\n"%(len(self.failed_download)))
+	self.f[-1].write("Number of failed downloads: %d\n\n"%(len(self.failed_download)))
 	self.closeMoteLog(-1) # Close the log file for failed mote downloads
 
     def fullDownload(self, motes, itrs=10):
+	'''
+	Method fullDownload will iterate over the _downloadData method until all motes are successful,
+		or until the number of desired iterations is complete. The default number of iterations is 10.
+		After each iteration is set the channel is reset, and the basestations re-contacted to ensure
+		that the connection of the next iteration will be strong.
+
+	If the pipe to one of the downloaders, or the commander, is broken then this 
+		method will continue to run because the error is raised from the MOTEIF.py file.
+		In this case none of the motes will be downloaded, the program will need to be restarted
+		and the nodes (all telosB motes) will need to be reconnected.
+	'''
 	_motes = motes
 	for _ in range(itrs):
 	    self._downloadData(_motes)
-	    self.printWriteLine("Resetting the channels before next iteration!")
+	    if not self.failed_download: # If no motes failed to download, then break
+		break
+	    self.printWriteLine("Resetting the channels before next iteration!\n")
 	    # Prepare for next iteration
+	    # Reset the Channel
 	    self.resetChannel()
 	    time.sleep(15) # Wait for channel reset
+	    # Get all available downloaders
 	    self.setBaseStationChannel()
 	    time.sleep(15)
-	    _motes = self.failed_download # make the next iteration with unsuccessful  motes
+	    _motes = self.failed_download # Swap lists.
 	    self.failed_download = []	
-	    if not _motes:
-		break
 
     def clearDownloadAll(self):
         print "clear mapping..."
@@ -563,6 +575,7 @@ class CmdCenter:
 	self.sendMessage(CMD_STOP_BLINK)
 
     def setBaseStationChannel(self):
+	self.basestations = {}
 	self.sendMessage(CMD_CHANNEL, channel=-1, dst=0xffff)
 
     def resetDownloadTimer(self):
