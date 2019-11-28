@@ -13,7 +13,7 @@ import optparse
 
 import threading # For new download process threads
 import tqdm # For the progress bars
-import time # Added for timing the motes.
+import time # Added for timing the motes and date
 
 from itertools import islice
 
@@ -66,11 +66,15 @@ DOWN_CURRENT        = 43
 DOWN_FINISHED       = 44
 DOWN_ERROR 	    = 45
 
-# Create directory for LOG file. All commands are written to this file.
+# Path for the failed download mote logs
+FAIL_PATH = "/failed_downloads_"
+# Path for the log file
+LOG_PATH = "/download_log_stat.txt"
+# Create directory for LOG files. All commands are written to this file.
 # Directories are named by the day of use.
-basedir = time.strftime("%m-%d-%Y", time.localtime())
-if not os.path.exists(basedir):
-    os.mkdir(basedir)
+BASE_DIR = time.strftime("%m-%d-%Y", time.localtime())
+if not os.path.exists(BASE_DIR):
+    os.mkdir(BASE_DIR)
 
 
 class CmdCenter:
@@ -150,7 +154,7 @@ class CmdCenter:
         self.wrenConnectionTimer = ResettableTimer(2, self.printConnection)
 
 	# Log file for all commands run.
-        self.logger = Logger(basedir+"/download_log_stat.txt")
+        self.logger = Logger(BASE_DIR+LOG_PATH)
         
 	# Count number of motes in self.m 
         numberOfMotes = 0
@@ -225,7 +229,7 @@ class CmdCenter:
 
         if m.get_src() == 1:
 	    # this is the base mote. Store it's time for sync in file
-	    f = open(basedir+"/timesync.log", "a+")
+	    f = open(BASE_DIR+"/timesync.log", "a+")
 	    f.write("%.3f, %d\n"%(time.time(), m.get_globaltime()))
 	    f.close()
 
@@ -310,7 +314,7 @@ class CmdCenter:
 	with self.lock:
 	    if nodeid in self.basestations.values():
 		self.download_status[nodeid] = DOWN_CURRENT
-		self.f[nodeid] = open(basedir+"/node_%d.log"%(nodeid), "a+")
+		self.f[nodeid] = open(BASE_DIR+"/node_%d.log"%(nodeid), "a+")
 
     def closeMoteLog(self, nodeid):
 	'''
@@ -323,6 +327,16 @@ class CmdCenter:
 		self.f[nodeid].close() # Close the file
 		del self.f[nodeid] # Delete the object from the dictionary
 
+    def findNextFile(self, fp):
+	''' 
+	Takes in a file path as a parameter. Appends a number to the end of the file path 
+	until the file does not exist.
+	'''
+	n = 0
+	while os.path.exist(BASE_DIR+fp+str(n)):
+	    n += 1
+	return BASE_DIR+fp+str(n)
+
     def clearDownloadByNodeId(self, nodeid):
         cleared = False
         for baseid, value in self.basestations.iteritems(): 
@@ -333,11 +347,6 @@ class CmdCenter:
                 break
         return cleared
 
-    # Unassociate mote with specified baseid
-    def clearDownloadByBaseId(self, baseid):
-        self.basestations[baseid] = 0
-
-    # Gavin's version of the finishDownload method.
     def finishDownload(self, baseid, nodeid):
 	'''
 	Cleans up the download of a particular mote.
@@ -473,7 +482,8 @@ class CmdCenter:
 					   # 	to reflect the completed mote, whether successful or not.
 	    if self.download_status[nodeid] == DOWN_ERROR:
 		continue # We need to do something for the errors that will possibly fix the system
-	self.prog_bars[baseid].close() # Get rid of the progress bar now that the process is finished
+        self.prog_bars[baseid].reset()
+        self.prog_bars[baseid].set_description('Download Finished')
 
     def _downloadData(self, motes):
 	'''
@@ -488,7 +498,7 @@ class CmdCenter:
 		    which allows the download of a specific subset of the moets.
 	'''
 	# Open a log file to store the failed mote downloads	
-	self.f[-1] = open(basedir+"/failed_downloads", "a+")
+	self.f[-1] = open(self.findNextFile(self.FAIL_PATH), "a+")
 	# Progress bar for the total download
 	self.prog_bars[0] = tqdm.tqdm(total=len(motes),desc='Total Motes',position=0)
 	_threads = list()
@@ -504,19 +514,18 @@ class CmdCenter:
 	# Join all the threads
 	for t in _threads:
 	    t.join()
-	self.prog_bars[0].close()
-#	# Close all the progress bars.
-#	for pb in self.prog_bars.values():
-#	    pb.close()
+	# Close all the progress bars.
+	for pb in self.prog_bars.values():
+	    pb.close()
 
-	self.f[-1].write("Number of failed downloads: %d\n\n"%(len(self.failed_download)))
+	self.f[-1].write("Number of failed downloads: %d\n\n\n\n"%(len(self.failed_download)))
 	self.closeMoteLog(-1) # Close the log file for failed mote downloads
 
     def fullDownload(self, motes, itrs=10):
 	'''
 	Method fullDownload will iterate over the _downloadData method until all motes are successful,
 		or until the number of desired iterations is complete. The default number of iterations is 10.
-		After each iteration is set the channel is reset, and the basestations re-contacted to ensure
+		After each iteration the channel is reset, and the basestations re-contacted to ensure
 		that the connection of the next iteration will be strong.
 
 	If the pipe to one of the downloaders, or the commander, is broken then this 
@@ -524,21 +533,30 @@ class CmdCenter:
 		In this case none of the motes will be downloaded, the program will need to be restarted
 		and the nodes (all telosB motes) will need to be reconnected.
 	'''
+	# Used for timing the download process
+	print("Motes to be downloaded")
+	print motes
+	print("With %d iterations"%itrs)
+	start_time = time.time()
 	_motes = motes
 	for _ in range(itrs):
-	    self._downloadData(_motes)
-	    if not self.failed_download: # If no motes failed to download, then break
+	    if not _motes: # If no motes failed to download, then break
 		break
-	    self.printWriteLine("Resetting the channels before next iteration!\n")
+	    self.printWriteLine("\nRESETTING CHANNELS BEFORE NEXT ITERATION\n\n")
 	    # Prepare for next iteration
 	    # Reset the Channel
 	    self.resetChannel()
 	    time.sleep(15) # Wait for channel reset
 	    # Get all available downloaders
+	    # I do this every iteration because it will filter out downloaders that have stopped responding
 	    self.setBaseStationChannel()
 	    time.sleep(15)
+	    self._downloadData(_motes)
 	    _motes = self.failed_download # Swap lists.
 	    self.failed_download = []	
+	end_time = time.time()	
+	self.printWrite("\nCalculating download time for %d iterations\n"%(itrs))
+	self.time_elapsed(start_time, end_time) # Calculate and print the time elapsed
 
     def clearDownloadAll(self):
         print "clear mapping..."
@@ -556,11 +574,9 @@ class CmdCenter:
     
     def resetDownloadMaxTry(self, nodeid):
         self.downloadMaxTry[nodeid] = 0
-        #del self.downloadMaxTry[nodeid]
 
     def resetDownloadMaxReTry(self, nodeid):
         self.downloadMaxRetry[nodeid] = 0
-#        del self.downloadMaxRetry[nodeid]
         
     def resetChannel(self):
 	self.sendMessage(CMD_CHANNEL_RESET, channel=11, dst=0xffff)
@@ -618,19 +634,6 @@ class CmdCenter:
 
         self.basemsgs = {}
 
-# Function commented out because it is not being used. - Gavin
-#    def printWRENStatus(self):
-#        wrenkeys = self.wrenmsgs.keys()
-#        wrenkeys.sort()
-#        for id in wrenkeys:
-#            m = self.wrenmsgs[id]
-#            sys.stdout.write("id: %4d, sensing: %d\n"%(m.get_src(), m.get_sensing()))
-#
-#        sys.stdout.write("%d messages received !\n"%(len(self.wrenmsgs)))
-#        sys.stdout.flush()
-#
-#        self.wrenmsgs = {}
-
     def printConnection(self):
         wrenkeys = self.wrenconnectionmsgs.keys()
         wrenkeys.sort()
@@ -658,7 +661,8 @@ class CmdCenter:
 	minutes = (total_time % 3600) // 60
 	seconds = ((total_time % 3600)%60)
 
-	print("Time Elapsed: \nD:%d, \nH:%d, \nM:%d, \nS:%d"%(days,hours,minutes,seconds))
+	self.printWrite("\nTime Elapsed: \nD:%d, \nH:%d, \nM:%d, \nS:%d\n"%(days,hours,minutes,seconds))
+	self.printFlush()
 
     def sendMessage(self, MSG_TYPE, nodeid=0xffff, channel=None, dst=None):
 	'''
@@ -808,28 +812,19 @@ class CmdCenter:
             elif c == 'd':
 		# Set mode to download all
                 self.downloadMode = DOWNLOAD_ALL
-
                 # start download
                 # stop all motes first
                 self.scanMotes()
-                self.setBaseStationChannel()
-
 		# Give some time for the motes to settle down.
                 time.sleep(10)
 		# Make sure that sensing is off.
 		self.sendMessage(CMD_STOP_SENSE)
-
-		start_time = time.time()
+		time.sleep(10)
+		
 		if not __debug__:
-#		    self._downloadData(self.motes)
 		    self.fullDownload(self.motes)
 		else:
-		    # Reset the download timer. When the timer expires (every 4 seconds)
-		    # it will call the downloadData() function.
-		    self.resetDownloadTimer()
-		    self.downloadData()
-		end_time = time.time()
-		self.time_elapsed(start_time, end_time)
+		    self.fullDownload(self.motes)
 
             elif c == 'r':
                 # restore log
@@ -872,39 +867,27 @@ class CmdCenter:
                     nodeid = int(cs[1])
                     # get status
                     c = raw_input("Are you sure you want to erase the data for node " + str(nodeid) + " [y/n]")
-                    if c != 'y':
+                    if c != 'y' or c.lower() != 'yes':
                         print "Abort erase"
                         continue
 		    self.sendMessage(CMD_ERASE, nodeid=nodeid)
                 elif c[0] == 'd':
-		    # Download particular mote
-                    self.downloadMode = DOWNLOAD_SINGLE
-                    # start download
-                    cs = c.strip().split(" ")
-                    nodeid = int(cs[1])
-		    # to have the option of setting the fullDownload method settings test to see
-			# if nodeid < 100 and if so then do the fullDownload procedure and 
-			# use nodeid as number of iterations.
-                    # get the first group of motes for download and set channels for base stations
-                    #self.scanMotes()
-                    # set base channels
-#		    self.scanMotes()
-                    self.setBaseStationChannel()
-                    time.sleep(10) #give sometime to settle down                
-		    self.sendMessage(CMD_STOP_SENSE, nodeid=nodeid)
-                    time.sleep(5) #give sometime to settle down                
-
-                    if self.motes.count(nodeid) == 0:
-                        self.motes.append(nodeid)
-
-		    start_time = time.time()
-		    if not __debug__:
-		        self._downloadData([int(cs[1])])
-		    else:
-                        self.downloadData()
-		    end_time = time.time()
-
-		    self.time_elapsed(start_time, end_time)
+		    cs = c[1:].strip().split(' ') # get the full input array
+		    itrs=10
+		    # check to see if the itrs was set
+		    if cs[0] == '-i': # -i is the flag to set the iterations
+			if len(cs) >= 2 and int(cs[1]) <= 30:
+       			    itrs = int(cs[1]) # If it was and is reasonable then set it.
+			cs.remove(cs[0]) # delete the flag
+			cs.remove(cs[0]) # and the number of iterations
+	  	    if not cs: # if the rest of the input is empty that means all the motes should be downloaded
+	       	        self.scanMotes()
+			time.sleep(10)
+			self.fullDownload(self.motes, itrs=itrs)
+		    elif not __debug__:
+		        self.fullDownload([int(x) for x in cs], itrs=itrs)
+		    else: # else we just want to download the motes specified
+		        self.fullDownload([int(x) for x in cs], itrs=itrs)
                 elif c[0] == 'r':
 		    # Restore a particular mote
                     cs = c.strip().split(" ")
@@ -914,9 +897,7 @@ class CmdCenter:
 		# Print the help menu 
                 self.help()
 
-
-def main():
-    # Create an instance of CmdCenter
+def main(): # Create an instance of CmdCenter
     cc = CmdCenter()
     # Run the loop
     # This shouldn't return unless the user presses q

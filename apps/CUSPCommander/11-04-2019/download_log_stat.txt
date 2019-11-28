@@ -1,0 +1,156 @@
+Mon Nov  4 15:12:53 2019, command: s
+id: 2376, sensing: 0, local: 62258784, global: 62258784, isSync: 1, reboot: 1, bat: 4.61, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 2384, sensing: 0, local: 62258336, global: 62258336, isSync: 1, reboot: 1, bat: 4.66, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 2433, sensing: 0, local: 62258800, global: 62258800, isSync: 1, reboot: 1, bat: 4.65, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 2458, sensing: 0, local: 62259829, global: 62259829, isSync: 1, reboot: 1, bat: 4.65, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 2587, sensing: 0, local: 62259023, global: 62259023, isSync: 1, reboot: 1, bat: 4.63, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 3014, sensing: 0, local: 62259844, global: 62259844, isSync: 1, reboot: 1, bat: 4.49, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 3146, sensing: 0, local: 62259706, global: 62259706, isSync: 1, reboot: 1, bat: 4.48, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 3735, sensing: 0, local: 62258258, global: 62258258, isSync: 1, reboot: 1, bat: 4.47, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 3739, sensing: 0, local: 175275, global: 175275, isSync: 1, reboot: 2, bat: 4.49, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 62259459, global: 62259459, isSync: 1, reboot: 1, bat: 4.56, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 62259394, global: 62259394, isSync: 1, reboot: 1, bat: 4.55, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 62258584, global: 62258584, isSync: 1, reboot: 1, bat: 4.43, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 4339, sensing: 0, local: 62259393, global: 62259393, isSync: 1, reboot: 1, bat: 4.50, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 4365, sensing: 0, local: 62258415, global: 62258415, isSync: 1, reboot: 1, bat: 4.53, logsize: 66045, isErased: 0, download: 0, channel: 11,
+14 messages received!
+Mon Nov  4 15:13:17 2019, command: d
+download start: Mon Nov  4 15:13:27 2019, channel: 16, nodeid: 4339
+download start: Mon Nov  4 15:13:27 2019, channel: 12, nodeid: 4204
+download start: Mon Nov  4 15:13:27 2019, channel: 15, nodeid: 3923
+download end: Mon Nov  4 15:15:17 2019, channel: 16, nodeid: 4339
+download start: Mon Nov  4 15:15:17 2019, channel: 16, nodeid: 2376
+download end: Mon Nov  4 15:17:07 2019, channel: 16, nodeid: 2376
+download start: Mon Nov  4 15:17:07 2019, channel: 16, nodeid: 3014
+download end: Mon Nov  4 15:18:57 2019, channel: 16, nodeid: 3014
+download start: Mon Nov  4 15:18:57 2019, channel: 16, nodeid: 2458
+download end: Mon Nov  4 15:20:47 2019, channel: 16, nodeid: 2458
+download start: Mon Nov  4 15:20:47 2019, channel: 16, nodeid: 3735
+download end: Mon Nov  4 15:22:37 2019, channel: 16, nodeid: 3735
+download start: Mon Nov  4 15:22:37 2019, channel: 16, nodeid: 2587
+download end: Mon Nov  4 15:24:27 2019, channel: 16, nodeid: 2587
+download start: Mon Nov  4 15:24:27 2019, channel: 16, nodeid: 2384
+download end: Mon Nov  4 15:26:17 2019, channel: 16, nodeid: 2384
+download start: Mon Nov  4 15:26:17 2019, channel: 16, nodeid: 2433
+download end: Mon Nov  4 15:28:07 2019, channel: 16, nodeid: 2433
+download start: Mon Nov  4 15:28:07 2019, channel: 16, nodeid: 4262
+download end: Mon Nov  4 15:29:58 2019, channel: 16, nodeid: 4262
+download start: Mon Nov  4 15:29:58 2019, channel: 16, nodeid: 4086
+download end: Mon Nov  4 15:30:27 2019, channel: 12, nodeid: 4204
+download start: Mon Nov  4 15:30:27 2019, channel: 12, nodeid: 3146
+download end: Mon Nov  4 15:31:48 2019, channel: 16, nodeid: 4086
+download end: Mon Nov  4 15:32:18 2019, channel: 12, nodeid: 3146
+download end: Mon Nov  4 15:41:08 2019, channel: 15, nodeid: 3923
+Resetting the channels before next iteration!
+
+download start: Mon Nov  4 15:41:38 2019, channel: 16, nodeid: 3146
+download start: Mon Nov  4 15:41:38 2019, channel: 12, nodeid: 4086
+download start: Mon Nov  4 15:41:38 2019, channel: 15, nodeid: 4262
+download end: Mon Nov  4 15:43:28 2019, channel: 12, nodeid: 4086
+download end: Mon Nov  4 15:43:28 2019, channel: 15, nodeid: 4262
+download start: Mon Nov  4 15:43:28 2019, channel: 12, nodeid: 2433
+download start: Mon Nov  4 15:43:28 2019, channel: 15, nodeid: 2384
+download end: Mon Nov  4 15:43:28 2019, channel: 16, nodeid: 3146
+download start: Mon Nov  4 15:43:28 2019, channel: 16, nodeid: 2587
+download end: Mon Nov  4 15:45:18 2019, channel: 12, nodeid: 2433
+download end: Mon Nov  4 15:45:18 2019, channel: 16, nodeid: 2587
+download start: Mon Nov  4 15:45:18 2019, channel: 12, nodeid: 3735
+download start: Mon Nov  4 15:45:18 2019, channel: 16, nodeid: 2458
+download end: Mon Nov  4 15:45:18 2019, channel: 15, nodeid: 2384
+download start: Mon Nov  4 15:45:18 2019, channel: 15, nodeid: 3014
+download end: Mon Nov  4 15:47:08 2019, channel: 16, nodeid: 2458
+download start: Mon Nov  4 15:47:08 2019, channel: 16, nodeid: 2376
+download end: Mon Nov  4 15:47:08 2019, channel: 12, nodeid: 3735
+download start: Mon Nov  4 15:47:08 2019, channel: 12, nodeid: 4339
+download end: Mon Nov  4 15:47:08 2019, channel: 15, nodeid: 3014
+download end: Mon Nov  4 15:48:58 2019, channel: 12, nodeid: 4339
+download end: Mon Nov  4 15:48:58 2019, channel: 16, nodeid: 2376
+Resetting the channels before next iteration!
+
+download start: Mon Nov  4 15:49:28 2019, channel: 16, nodeid: 2376
+download start: Mon Nov  4 15:49:28 2019, channel: 12, nodeid: 4339
+download start: Mon Nov  4 15:49:28 2019, channel: 15, nodeid: 3014
+download end: Mon Nov  4 15:51:19 2019, channel: 12, nodeid: 4339
+download start: Mon Nov  4 15:51:19 2019, channel: 12, nodeid: 3735
+download end: Mon Nov  4 15:51:19 2019, channel: 16, nodeid: 2376
+download start: Mon Nov  4 15:51:19 2019, channel: 16, nodeid: 2458
+download end: Mon Nov  4 15:51:19 2019, channel: 15, nodeid: 3014
+download start: Mon Nov  4 15:51:19 2019, channel: 15, nodeid: 2384
+download end: Mon Nov  4 15:53:09 2019, channel: 15, nodeid: 2384
+download start: Mon Nov  4 15:53:09 2019, channel: 15, nodeid: 2587
+download end: Mon Nov  4 15:53:09 2019, channel: 12, nodeid: 3735
+download end: Mon Nov  4 15:53:09 2019, channel: 16, nodeid: 2458
+Mon Nov  4 15:55:26 2019, command: s
+Mon Nov  4 15:55:45 2019, command: s
+Mon Nov  4 15:55:50 2019, command: x
+id:    0, sensing: 0, local: 0, global: 0, isSync: 0, reboot: 0, bat: 0.00, logsize: 0, isErased: 0, download: 0, channel: 0,
+1 messages received!
+Mon Nov  4 15:56:00 2019, command: x
+id:    0, sensing: 0, local: 0, global: 0, isSync: 0, reboot: 0, bat: 0.00, logsize: 0, isErased: 0, download: 0, channel: 0,
+1 messages received!
+Mon Nov  4 15:56:13 2019, command: s
+Mon Nov  4 15:56:29 2019, command: s
+Mon Nov  4 15:56:37 2019, command: x
+id:    0, sensing: 0, local: 0, global: 0, isSync: 0, reboot: 0, bat: 0.00, logsize: 0, isErased: 0, download: 0, channel: 0,
+1 messages received!
+Mon Nov  4 15:57:08 2019, command: t
+Mon Nov  4 15:57:14 2019, command: a
+Mon Nov  4 15:57:50 2019, command: d
+download start: Mon Nov  4 15:58:00 2019, channel: 16, nodeid: 4365
+download start: Mon Nov  4 15:58:00 2019, channel: 12, nodeid: 3146
+download start: Mon Nov  4 15:58:00 2019, channel: 15, nodeid: 2587
+download end: Mon Nov  4 15:59:50 2019, channel: 15, nodeid: 2587
+download start: Mon Nov  4 15:59:50 2019, channel: 15, nodeid: 2433
+download end: Mon Nov  4 15:59:50 2019, channel: 16, nodeid: 4365
+download start: Mon Nov  4 15:59:50 2019, channel: 16, nodeid: 4086
+download end: Mon Nov  4 16:13:50 2019, channel: 12, nodeid: 3146
+download start: Mon Nov  4 16:13:50 2019, channel: 12, nodeid: 4262
+download end: Mon Nov  4 16:16:11 2019, channel: 16, nodeid: 4086
+download start: Mon Nov  4 16:16:11 2019, channel: 16, nodeid: 3735
+download end: Mon Nov  4 16:32:31 2019, channel: 16, nodeid: 3735
+download end: Mon Nov  4 16:43:22 2019, channel: 12, nodeid: 4262
+download end: Mon Nov  4 16:59:53 2019, channel: 15, nodeid: 2433
+Resetting the channels before next iteration!
+
+download start: Mon Nov  4 17:00:23 2019, channel: 16, nodeid: 2433
+download start: Mon Nov  4 17:00:23 2019, channel: 12, nodeid: 4365
+download start: Mon Nov  4 17:00:23 2019, channel: 15, nodeid: 2587
+download end: Mon Nov  4 17:02:13 2019, channel: 16, nodeid: 2433
+download end: Mon Nov  4 17:44:55 2019, channel: 12, nodeid: 4365
+download end: Mon Nov  4 17:49:25 2019, channel: 15, nodeid: 2587
+Resetting the channels before next iteration!
+
+download start: Mon Nov  4 17:49:55 2019, channel: 16, nodeid: 2587
+download start: Mon Nov  4 17:49:55 2019, channel: 12, nodeid: 4365
+download end: Mon Nov  4 17:51:35 2019, channel: 16, nodeid: 2587
+download end: Mon Nov  4 17:54:45 2019, channel: 12, nodeid: 4365
+Mon Nov  4 18:00:49 2019, command: s
+id: 2376, sensing: 0, local: 72576175, global: 72576175, isSync: 1, reboot: 1, bat: 4.59, logsize: 58833, isErased: 0, download: 0, channel: 11,
+id: 2384, sensing: 0, local: 72576059, global: 72576059, isSync: 1, reboot: 1, bat: 4.64, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 2433, sensing: 0, local: 72575827, global: 72575827, isSync: 1, reboot: 1, bat: 4.60, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 2458, sensing: 0, local: 72575546, global: 72575546, isSync: 1, reboot: 1, bat: 4.64, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 3014, sensing: 0, local: 72576637, global: 72576637, isSync: 1, reboot: 1, bat: 4.56, logsize: 60197, isErased: 0, download: 0, channel: 11,
+id: 3146, sensing: 0, local: 72574884, global: 72574884, isSync: 1, reboot: 1, bat: 4.52, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 3735, sensing: 0, local: 72575596, global: 72575596, isSync: 1, reboot: 1, bat: 4.50, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 3739, sensing: 0, local: 10493119, global: 10493119, isSync: 1, reboot: 2, bat: 4.56, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 3923, sensing: 0, local: 72576484, global: 72576484, isSync: 1, reboot: 1, bat: 4.56, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 72574881, global: 72574881, isSync: 1, reboot: 1, bat: 4.53, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 4204, sensing: 0, local: 72575514, global: 72575514, isSync: 1, reboot: 1, bat: 4.61, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 72576226, global: 72576226, isSync: 1, reboot: 1, bat: 4.46, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 4339, sensing: 0, local: 10148355, global: 10148355, isSync: 1, reboot: 2, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+13 messages received!
+Mon Nov  4 18:01:04 2019, command: s
+id: 2376, sensing: 0, local: 72591169, global: 72591169, isSync: 1, reboot: 1, bat: 4.63, logsize: 58833, isErased: 0, download: 0, channel: 11,
+id: 2384, sensing: 0, local: 72591122, global: 72591122, isSync: 1, reboot: 1, bat: 4.66, logsize: 66045, isErased: 0, download: 0, channel: 11,
+id: 2433, sensing: 0, local: 72591188, global: 72591188, isSync: 1, reboot: 1, bat: 4.59, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 2458, sensing: 0, local: 72592321, global: 72592321, isSync: 1, reboot: 1, bat: 4.65, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 3014, sensing: 0, local: 72591770, global: 72591770, isSync: 1, reboot: 1, bat: 4.53, logsize: 60197, isErased: 0, download: 0, channel: 11,
+id: 3146, sensing: 0, local: 72592878, global: 72592878, isSync: 1, reboot: 1, bat: 4.52, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 3735, sensing: 0, local: 72591417, global: 72591417, isSync: 1, reboot: 1, bat: 4.51, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 3739, sensing: 0, local: 10508513, global: 10508513, isSync: 1, reboot: 2, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 3923, sensing: 0, local: 72592954, global: 72592954, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 72592243, global: 72592243, isSync: 1, reboot: 1, bat: 4.53, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 4204, sensing: 0, local: 72591562, global: 72591562, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 72592703, global: 72592703, isSync: 1, reboot: 1, bat: 4.47, logsize: 0, isErased: 0, download: 1, channel: 11,
+id: 4339, sensing: 0, local: 10163071, global: 10163071, isSync: 1, reboot: 2, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+13 messages received!

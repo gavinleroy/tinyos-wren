@@ -1,0 +1,158 @@
+Sun Sep 22 14:53:40 2019, command: s
+id: 4017, sensing: 0, local: 682272615, global: 682272615, isSync: 1, reboot: 1, bat: 4.56, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 682274893, global: 682274893, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 682275227, global: 682275227, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 682273193, global: 682273193, isSync: 1, reboot: 1, bat: 4.60, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 682275359, global: 682275359, isSync: 1, reboot: 1, bat: 4.51, logsize: 0, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 14:54:45 2019, command: t
+Sun Sep 22 15:01:20 2019, command: t
+Sun Sep 22 15:01:24 2019, command: a
+Sun Sep 22 15:01:26 2019, command: s
+id: 4017, sensing: 0, local: 682751185, global: 682751185, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 682752423, global: 682752423, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 682750730, global: 682750730, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 682751358, global: 682751358, isSync: 1, reboot: 1, bat: 4.51, logsize: 0, isErased: 0, download: 0, channel: 11,
+4 messages received!
+Sun Sep 22 15:02:11 2019, command: s
+id: 4017, sensing: 0, local: 682797298, global: 682797298, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 682799106, global: 682799106, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 682798448, global: 682798448, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 682798091, global: 682798091, isSync: 1, reboot: 1, bat: 4.60, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 682798904, global: 682798904, isSync: 1, reboot: 1, bat: 4.52, logsize: 0, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:03:52 2019, command: g
+Sun Sep 22 15:04:00 2019, command: s
+id: 4017, sensing: 1, local: 682908106, global: 682908106, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 1, local: 682910095, global: 682910095, isSync: 1, reboot: 1, bat: 4.62, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 1, local: 682908873, global: 682908873, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 1, local: 682908744, global: 682908744, isSync: 1, reboot: 1, bat: 4.63, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 1, local: 682910178, global: 682910178, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:04:18 2019, command: b
+Sun Sep 22 15:05:06 2019, command: b
+Sun Sep 22 15:05:08 2019, command: s
+id: 4017, sensing: 0, local: 682976781, global: 682976781, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 682979380, global: 682979380, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 682978423, global: 682978423, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 682979300, global: 682979300, isSync: 1, reboot: 1, bat: 4.51, logsize: 0, isErased: 0, download: 0, channel: 11,
+4 messages received!
+Sun Sep 22 15:05:14 2019, command: s
+id: 4017, sensing: 0, local: 682984732, global: 682984732, isSync: 1, reboot: 1, bat: 4.61, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 682986196, global: 682986196, isSync: 1, reboot: 1, bat: 4.61, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 682986416, global: 682986416, isSync: 1, reboot: 1, bat: 4.59, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 682985885, global: 682985885, isSync: 1, reboot: 1, bat: 4.64, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 682985663, global: 682985663, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:05:24 2019, command: q
+Sun Sep 22 15:06:49 2019, command: t
+Sun Sep 22 15:06:53 2019, command: a
+Sun Sep 22 15:06:56 2019, command: s
+id: 4017, sensing: 0, local: 683089510, global: 683089510, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 683089575, global: 683089575, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 683090539, global: 683090539, isSync: 1, reboot: 1, bat: 4.55, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 683089179, global: 683089179, isSync: 1, reboot: 1, bat: 4.59, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 683090320, global: 683090320, isSync: 1, reboot: 1, bat: 4.50, logsize: 0, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:07:03 2019, command: q
+Sun Sep 22 15:08:19 2019, command: q
+Sun Sep 22 15:21:38 2019, command: s
+id: 4017, sensing: 0, local: 683991338, global: 683991338, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 683992754, global: 683992754, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 683993089, global: 683993089, isSync: 1, reboot: 1, bat: 4.54, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 683992334, global: 683992334, isSync: 1, reboot: 1, bat: 4.60, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 683993249, global: 683993249, isSync: 1, reboot: 1, bat: 4.51, logsize: 0, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:22:10 2019, command: e
+Sun Sep 22 15:22:14 2019, command: e
+Sun Sep 22 15:22:54 2019, command: s
+id: 4017, sensing: 0, local: 684068383, global: 684068383, isSync: 1, reboot: 1, bat: 4.58, logsize: 0, isErased: 1, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 684071157, global: 684071157, isSync: 1, reboot: 1, bat: 4.61, logsize: 0, isErased: 1, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 684072242, global: 684072242, isSync: 1, reboot: 1, bat: 4.54, logsize: 0, isErased: 1, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 684069161, global: 684069161, isSync: 1, reboot: 1, bat: 4.57, logsize: 0, isErased: 1, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 684070850, global: 684070850, isSync: 1, reboot: 1, bat: 4.50, logsize: 0, isErased: 1, download: 0, channel: 11,
+5 messages received!
+id: 4017, sensing: 0, local: 684076968, global: 684076968, isSync: 1, reboot: 0, bat: 4.55, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 684078634, global: 684078634, isSync: 1, reboot: 0, bat: 4.55, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 684078271, global: 684078271, isSync: 1, reboot: 0, bat: 4.62, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 684076447, global: 684076447, isSync: 1, reboot: 0, bat: 4.47, logsize: 16, isErased: 0, download: 0, channel: 11,
+4 messages received!
+Sun Sep 22 15:24:59 2019, command: s
+id: 4017, sensing: 0, local: 684196467, global: 684196467, isSync: 1, reboot: 0, bat: 4.57, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 684199504, global: 684199504, isSync: 1, reboot: 0, bat: 4.57, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 684198477, global: 684198477, isSync: 1, reboot: 0, bat: 4.55, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 684198823, global: 684198823, isSync: 1, reboot: 0, bat: 4.59, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 684197835, global: 684197835, isSync: 1, reboot: 0, bat: 4.49, logsize: 16, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:25:08 2019, command: a
+Sun Sep 22 15:25:26 2019, command: g
+Sun Sep 22 15:25:42 2019, command: s
+id: 4017, sensing: 1, local: 684241792, global: 684241792, isSync: 1, reboot: 0, bat: 4.58, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 1, local: 684243484, global: 684243484, isSync: 1, reboot: 0, bat: 4.61, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 1, local: 684243954, global: 684243954, isSync: 1, reboot: 0, bat: 4.59, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 1, local: 684242657, global: 684242657, isSync: 1, reboot: 0, bat: 4.63, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 1, local: 684241934, global: 684241934, isSync: 1, reboot: 0, bat: 4.50, logsize: 16, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:55:37 2019, command: s
+id: 4086, sensing: 1, local: 686081166, global: 686081166, isSync: 1, reboot: 0, bat: 4.56, logsize: 376, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 1, local: 686081933, global: 686081933, isSync: 1, reboot: 0, bat: 4.53, logsize: 376, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 1, local: 686078777, global: 686078777, isSync: 1, reboot: 0, bat: 4.58, logsize: 375, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 1, local: 686079410, global: 686079410, isSync: 1, reboot: 0, bat: 4.51, logsize: 375, isErased: 0, download: 0, channel: 11,
+4 messages received!
+Sun Sep 22 15:56:16 2019, command: b
+Sun Sep 22 15:56:41 2019, command: s
+id: 4086, sensing: 0, local: 686147427, global: 686147427, isSync: 1, reboot: 0, bat: 4.56, logsize: 383, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 686146975, global: 686146975, isSync: 1, reboot: 0, bat: 4.54, logsize: 383, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 686146284, global: 686146284, isSync: 1, reboot: 0, bat: 4.58, logsize: 383, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 686147267, global: 686147267, isSync: 1, reboot: 0, bat: 4.50, logsize: 383, isErased: 0, download: 0, channel: 11,
+4 messages received!
+Sun Sep 22 15:56:59 2019, command: s
+id: 4017, sensing: 0, local: 686164508, global: 686164508, isSync: 1, reboot: 0, bat: 4.56, logsize: 384, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 686164984, global: 686164984, isSync: 1, reboot: 0, bat: 4.55, logsize: 383, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 686166424, global: 686166424, isSync: 1, reboot: 0, bat: 4.54, logsize: 383, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 686165681, global: 686165681, isSync: 1, reboot: 0, bat: 4.59, logsize: 383, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 686165410, global: 686165410, isSync: 1, reboot: 0, bat: 4.48, logsize: 383, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:57:14 2019, command: clear
+Sun Sep 22 15:57:20 2019, command: q
+Sun Sep 22 15:57:50 2019, command: r
+id: 4017, sensing: 0, local: 686218532, global: 686218532, isSync: 1, reboot: 0, bat: 4.57, logsize: 388, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 686220440, global: 686220440, isSync: 1, reboot: 0, bat: 4.60, logsize: 388, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 686221085, global: 686221085, isSync: 1, reboot: 0, bat: 4.53, logsize: 388, isErased: 0, download: 0, channel: 11,
+id: 4204, sensing: 0, local: 686219507, global: 686219507, isSync: 1, reboot: 0, bat: 4.60, logsize: 388, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 686220313, global: 686220313, isSync: 1, reboot: 0, bat: 4.50, logsize: 388, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Sun Sep 22 15:59:02 2019, command: r
+id: 4086, sensing: 0, local: 686292320, global: 686292320, isSync: 1, reboot: 0, bat: 4.53, logsize: 388, isErased: 0, download: 0, channel: 11,
+id: 4123, sensing: 0, local: 686292756, global: 686292756, isSync: 1, reboot: 0, bat: 4.54, logsize: 388, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 686291566, global: 686291566, isSync: 1, reboot: 0, bat: 4.48, logsize: 388, isErased: 0, download: 0, channel: 11,
+3 messages received!
+Sun Sep 22 16:01:09 2019, command: p
+Sun Sep 22 16:01:17 2019, command: w
+Sun Sep 22 16:02:41 2019, command: w
+Sun Sep 22 16:02:49 2019, command: d
+connection and file closed: Sun Sep 22 16:03:08 2019, nodeid: 4017
+download end: Sun Sep 22 16:03:08 2019, channel: 12, nodeid: 4017
+download restart: Sun Sep 22 16:03:25 2019, channel: 12, nodeid: 4262
+Sun Sep 22 16:05:07 2019, command: d
+Sun Sep 22 16:06:07 2019, command: d
+Sun Sep 22 16:06:23 2019, command: d
+Sun Sep 22 16:06:45 2019, command: d
+download stop: Sun Sep 22 16:06:48 2019, channel: 12, nodeid: 4262
+Sun Sep 22 16:07:12 2019, command: d
+download restart: Sun Sep 22 16:07:49 2019, channel: 12, nodeid: 4086
+download restart: Sun Sep 22 16:08:06 2019, channel: 12, nodeid: 4086
+Sun Sep 22 16:08:47 2019, command: d
+Sun Sep 22 16:09:12 2019, command: d
+Sun Sep 22 16:09:31 2019, command: d
+Sun Sep 22 16:10:05 2019, command: d
+download stop: Sun Sep 22 16:10:08 2019, channel: 12, nodeid: 4086
+Sun Sep 22 16:10:39 2019, command: x
+Sun Sep 22 16:10:46 2019, command: d
+Sun Sep 22 16:11:38 2019, command: d
+Sun Sep 22 16:11:56 2019, command: d
+Sun Sep 22 16:12:25 2019, command: d
+Sun Sep 22 16:13:03 2019, command: 
+Sun Sep 22 16:13:06 2019, command: d
+download start: Sun Sep 22 16:13:09 2019, channel: 12, nodeid: 4262
+Sun Sep 22 16:18:02 2019, command: d
