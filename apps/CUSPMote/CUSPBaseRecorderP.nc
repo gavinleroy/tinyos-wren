@@ -486,7 +486,7 @@ implementation {
         if(!sensing) {
             call SensingTimer.stop();
         } else {
-            if(!rssilocked && !sleep) {
+            if(!rssilocked && !sleep) { // GAVIN:: Theoretically this should stop sending if a mote is sleeping. However, signals still get sent.
                 rssiMaxUnlockCounter = 0;
 
                 call Leds.led2On();
@@ -527,7 +527,7 @@ implementation {
                 }
             }
         }
-        sleep = FALSE;
+        sleep = FALSE; // GAVIN:: I believe that it has something to do with setting sleep to FALSE every time.
     }
 
     event void BatteryTimer.fired() {
@@ -1773,8 +1773,8 @@ implementation {
                 // check if we have still space in the log
                 // note, 66000 is a magic number. getSize reports too big of a
                 // number. 66000 seems like a save margine
-                //if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (call LogRead.getSize() - 30000)) {
-//                if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
+                // if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (call LogRead.getSize() - 30000)) {
+		// if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
                 if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
                     rssi_serial_msg_t rssi_serial_m;
                     uint32_t time;
@@ -1786,7 +1786,12 @@ implementation {
                         time  = call GlobalTime.getLocalTime();
                     }
 
+		    // GAVIN - note that this set sleep=TRUE only would occure if there is space in the log file
+		    // of the receiving node, however, we would want to set sleep=TRUE in order to stop sending signals as well even if
+		    // the log file is full...
+
                     // If this message is from node 1, then delay sensing
+		    // NODE 1 is the sleeper.
                     if(rssim->src == TIMESYNC_NODEID || rssim->src == SLEEP_NODEID) {
                         sleep = TRUE;                        
                         call SensingTimer.stop();
