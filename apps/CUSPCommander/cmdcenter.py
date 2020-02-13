@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Last edited by Gavin Gray at the University of Utah
-#	September 22, 2019
+#	December 19, 2019
 #
 
 from mni import mni
@@ -333,7 +333,7 @@ class CmdCenter:
 	until the file does not exist.
 	'''
 	n = 0
-	while os.path.exist(BASE_DIR+fp+str(n)):
+	while os.path.exists(BASE_DIR+fp+str(n)):
 	    n += 1
 	return BASE_DIR+fp+str(n)
 
@@ -498,7 +498,7 @@ class CmdCenter:
 		    which allows the download of a specific subset of the moets.
 	'''
 	# Open a log file to store the failed mote downloads	
-	self.f[-1] = open(self.findNextFile(self.FAIL_PATH), "a+")
+	self.f[-1] = open(self.findNextFile(FAIL_PATH), "a+")
 	# Progress bar for the total download
 	self.prog_bars[0] = tqdm.tqdm(total=len(motes),desc='Total Motes',position=0)
 	_threads = list()
