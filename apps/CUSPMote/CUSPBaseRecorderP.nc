@@ -178,6 +178,7 @@ implementation {
     bool connectionlocked = FALSE;
 
     bool sleep = FALSE;
+    bool sleep_check = FALSE;
     bool halt = FALSE;
     bool stopDownload = FALSE;
     
@@ -280,6 +281,7 @@ implementation {
         wrenSendStatusTo = CONTROLLER_NODEID;
         
         sleep = FALSE;
+	sleep_check = FALSE;
         messageCount = 0;
 
         lastReceivedACKNo = 0;
@@ -486,7 +488,9 @@ implementation {
         if(!sensing) {
             call SensingTimer.stop();
         } else {
-            if(!rssilocked && !sleep) {
+	    // GAVIN:: Theoretically this should stop sending if a mote is sleeping. However, signals still get sent.
+	    // I've added the sleep check in order to try and stop the sending.
+            if(!rssilocked && !sleep && !sleep_check) { 
                 rssiMaxUnlockCounter = 0;
 
                 call Leds.led2On();
@@ -527,7 +531,8 @@ implementation {
                 }
             }
         }
-        sleep = FALSE;
+        sleep = sleep_check; // GAVIN:: I believe that it has something to do with setting sleep to FALSE every time.
+	sleep_check = FALSE;
     }
 
     event void BatteryTimer.fired() {
@@ -1181,6 +1186,7 @@ implementation {
     {
         download = 0;
         sleep = FALSE;
+	sleep_check = FALSE;
         
         call Blink.stop();
 
@@ -1229,6 +1235,7 @@ implementation {
         download = 0;
         stopDownload = FALSE;
         sleep = FALSE;
+	sleep_check = FALSE;
         //call LowPowerListening.setLocalWakeupInterval(0);
         
         // When the download command comes, then change the channel and start sending 
@@ -1288,7 +1295,9 @@ implementation {
                 download = 0;
                 sensing = FALSE;
                 smartSensingCounter = 0;
+
                 sleep = FALSE;                
+		sleep_check = FALSE;
                 
                 // Halt all including the smart sensing
                 halt = TRUE;
@@ -1331,7 +1340,9 @@ implementation {
                 stopDownload = TRUE;
                 download = 0;
                 sensing = FALSE;
+
                 sleep = FALSE;
+		sleep_check = FALSE;
                                 
                 call SensingTimer.stop();
                 saveSensing(sensing);
@@ -1354,6 +1365,7 @@ implementation {
             case CMD_LOGSYNC:
                 download = 0;
                 sleep = FALSE;
+		sleep_check = FALSE;
                                 
                 call LogWrite.sync();
 
@@ -1370,6 +1382,7 @@ implementation {
             case CMD_CHANNEL_RESET:
                 stopDownload = TRUE;
                 sleep = FALSE;
+		sleep_check = FALSE;
                 
                 #ifdef DISSEMINATION_ON
                 call CommandUpdate.change(&currentCMD);
@@ -1772,8 +1785,8 @@ implementation {
                 // check if we have still space in the log
                 // note, 66000 is a magic number. getSize reports too big of a
                 // number. 66000 seems like a save margine
-                //if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (call LogRead.getSize() - 30000)) {
-//                if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
+                // if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (call LogRead.getSize() - 30000)) {
+		// if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
                 if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
                     rssi_serial_msg_t rssi_serial_m;
                     uint32_t time;
@@ -1785,15 +1798,22 @@ implementation {
                         time  = call GlobalTime.getLocalTime();
                     }
 
+			// GAVIN LOOK HERE ABOUT THIS NOTE***************
+		    // GAVIN - note that this set sleep=TRUE only would occure if there is space in the log file
+		    // of the receiving node, however, we would want to set sleep=TRUE in order to stop sending signals as well even if
+		    // the log file is full...
+
                     // If this message is from node 1, then delay sensing
+		    // NODE 1 is the sleeper.
                     if(rssim->src == TIMESYNC_NODEID || rssim->src == SLEEP_NODEID) {
                         sleep = TRUE;                        
+			sleep_check = TRUE;
                         call SensingTimer.stop();
                         call RandomTimer.startOneShot(5*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
                         return msg;
                     } 
                     
-                    if (sleep) {
+                    if (sleep || sleep_check) {
                         return msg;
                     }
 
