@@ -1265,6 +1265,8 @@ implementation {
     
     }
     
+    // IMPORTANT METHOD TO UNDERSTAND
+    // PROCESSES THE COMMAND THAT WAS RECEIVED FROM THE COMMANDER
     task void process_command() {
         #ifdef MOTE_DEBUG_MESSAGE_DETAIL
             if (call DiagMsg.record())
@@ -1785,8 +1787,7 @@ implementation {
                 // check if we have still space in the log
                 // note, 66000 is a magic number. getSize reports too big of a
                 // number. 66000 seems like a save margine
-                // if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (call LogRead.getSize() - 30000)) {
-		// if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
+
                 if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
                     rssi_serial_msg_t rssi_serial_m;
                     uint32_t time;
