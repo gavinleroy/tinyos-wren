@@ -205,8 +205,8 @@ implementation {
     uint16_t currentCMD;
     uint8_t currentChannel;
     uint16_t currentDST;
-	uint32_t currentClientLogSize;
-	uint16_t wrenSendStatusTo;
+    uint32_t currentClientLogSize;
+    uint16_t wrenSendStatusTo;
 	
     uint8_t swLowIndex;
     uint8_t swUpperIndex;
@@ -240,9 +240,9 @@ implementation {
     task void rssiLogRead();
     
     uint8_t getIndexFromLastSentFrameNo(uint32_t frameno);
-	uint8_t getIndexNumber(uint32_t input);
-	uint32_t slideDownWindows(uint32_t input);
-	uint32_t slideUpWindows(uint32_t input);
+    uint8_t getIndexNumber(uint32_t input);
+    uint32_t slideDownWindows(uint32_t input);
+    uint32_t slideUpWindows(uint32_t input);
 
     void clearFrameTable()
     {
@@ -689,23 +689,23 @@ implementation {
         TimeoutFrameTable();
     }
 
-	uint8_t getIndexNumber(uint32_t input) {
-		return input % RADIO_QUEUE_LEN;
-	}
+    uint8_t getIndexNumber(uint32_t input) {
+	return input % RADIO_QUEUE_LEN;
+    }
 
-	uint32_t slideDownWindows(uint32_t input) {
+    uint32_t slideDownWindows(uint32_t input) {
         if (input <= RADIO_QUEUE_LEN) {
-          return 0;
-        } else {
-          return input - (RADIO_QUEUE_LEN - 1);
+            return 0;
+        }else {
+            return input - (RADIO_QUEUE_LEN - 1);
         }   
 
 		//return input - (RADIO_QUEUE_LEN - 1);	
-	}
+    }
 
-	uint32_t slideUpWindows(uint32_t input) {
-		return input + (RADIO_QUEUE_LEN - 1);	
-	}
+    uint32_t slideUpWindows(uint32_t input) {
+	return input + (RADIO_QUEUE_LEN - 1);	
+    }
 
     task void rssiLogRead() 
     {
@@ -751,13 +751,12 @@ implementation {
             #endif
              atomic {
                 #ifdef MOTE_DEBUG_MESSAGE_DETAIL
-            
-                if (call DiagMsg.record())
-                {
-                    call DiagMsg.str("lr-rd:2");
-                    call DiagMsg.send();
-                }
-            #endif
+		    if (call DiagMsg.record())
+		    {
+	    	        call DiagMsg.str("lr-rd:2");
+			call DiagMsg.send();
+		    }
+		#endif
 //                rcm = (rssi_serial_msg_t*)call Packet.getPayload(&packet, sizeof(rssi_serial_msg_t));
 	            rcm = (rssi_serial_msg_t*)call Packet.getPayload(radioQueue[radioIn], sizeof(rssi_serial_msg_t));
                 memcpy(rcm, &(m_entry.msg), m_entry.len);
