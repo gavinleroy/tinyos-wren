@@ -1762,14 +1762,14 @@ implementation {
     }
 
     event message_t* Receive.receive(message_t* msg, void* payload, uint8_t len) {
+	rssi_msg_t* rssim = (rssi_msg_t*)payload;
         if (len != sizeof(rssi_msg_t)) {
             call Leds.led1Toggle(); 
             return msg;
         }
 
         #ifdef MOTE_DEBUG_MESSAGE_DETAIL
-            if (call DiagMsg.record())
-            {
+            if (call DiagMsg.record()) {
                 call DiagMsg.str("rec:1");
                 call DiagMsg.send();
             }
@@ -1783,15 +1783,43 @@ implementation {
                 #ifdef SMART_SENSING
                     smartSensing();
                 #endif        
-                
-                // check if we have still space in the log
-                // note, 66000 is a magic number. getSize reports too big of a
-                // number. 66000 seems like a save margine
 
+		/*
+		* LIST OF TENTATIVE CHANGES THAT WERE MADE:
+		* - The payload is cast to an rssi_msg_t*
+		*   at the beginning of the method and it is
+		*   checked whether the message was from a sleeper
+		*   much sooner.
+		*
+		* - Additionally, a second sleep_check
+		*   variable was added in order to keep the 
+		*   motes sleeping for longer. This means
+		*   that the motes will take twice as long 
+		*   to come out of sleeping mode, however,
+		*   they shouldn't be sending messages while asleep.
+		*
+		*/
+
+		// I am not sure why, but no variables can be created between the if(!logFull)
+		// and this line. For this reason I put the 
+		// rssi_msg_t* rssi = (rssi_msg_t*)payload;
+		// on the first line of the method Receive.receive.
+
+
+                if(rssim->src == SLEEP_NODEID) {
+                    sleep = TRUE;                        
+		    sleep_check = TRUE;
+                    call SensingTimer.stop();
+                    call RandomTimer.startOneShot(5*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
+                    return msg;
+                } 
+                // check if we still have space in the log
+                // note, 66000 is a magic number. getSize reports too big of a
+                // number. 66000 seems like a safe margine
                 if ((call LogWrite.currentOffset() - call LogRead.currentOffset()) < (66000L*sizeof(logentry_t))) {
+		    //rssi_msg_t* rssim = (rssi_msg_t*)payload;
                     rssi_serial_msg_t rssi_serial_m;
                     uint32_t time;
-                    rssi_msg_t* rssim = (rssi_msg_t*)payload;
 
                     if(call TimeSyncPacket.isValid(msg)) {
                         time = call TimeSyncPacket.eventTime(msg);
@@ -1799,13 +1827,14 @@ implementation {
                         time  = call GlobalTime.getLocalTime();
                     }
 
-			// GAVIN LOOK HERE ABOUT THIS NOTE***************
+		    // GAVIN LOOK HERE ABOUT THIS NOTE***************
 		    // GAVIN - note that this set sleep=TRUE only would occure if there is space in the log file
 		    // of the receiving node, however, we would want to set sleep=TRUE in order to stop sending signals as well even if
 		    // the log file is full...
 
                     // If this message is from node 1, then delay sensing
 		    // NODE 1 is the sleeper.
+		    // THIS TECHNICALLY NO LONGER NEEDS TO BE HERE, ONLY FOR TESTING PURPOSES
                     if(rssim->src == TIMESYNC_NODEID || rssim->src == SLEEP_NODEID) {
                         sleep = TRUE;                        
 			sleep_check = TRUE;
