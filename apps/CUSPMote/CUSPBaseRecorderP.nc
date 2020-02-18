@@ -1778,6 +1778,14 @@ implementation {
         atomic {
             messageCount++;
             
+	    if(rssim->src == SLEEP_NODEID) {
+	        sleep = TRUE;                        
+	        sleep_check = TRUE;
+	        call SensingTimer.stop();
+	        call RandomTimer.startOneShot(5*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
+	        return msg;
+	    } 
+
             if (!logFull) {
 
                 #ifdef SMART_SENSING
@@ -1806,13 +1814,6 @@ implementation {
 		// on the first line of the method Receive.receive.
 
 
-                if(rssim->src == SLEEP_NODEID) {
-                    sleep = TRUE;                        
-		    sleep_check = TRUE;
-                    call SensingTimer.stop();
-                    call RandomTimer.startOneShot(5*SENSING_INTERVAL + (call Random.rand32()%SENSING_INTERVAL));
-                    return msg;
-                } 
                 // check if we still have space in the log
                 // note, 66000 is a magic number. getSize reports too big of a
                 // number. 66000 seems like a safe margine
