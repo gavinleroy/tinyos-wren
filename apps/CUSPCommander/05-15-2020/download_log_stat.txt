@@ -1,0 +1,103 @@
+Fri May 15 22:25:33 2020, command: t
+Fri May 15 22:26:18 2020, command: a
+Fri May 15 22:26:23 2020, command: a
+Fri May 15 22:26:38 2020, command: s
+id: 2384, sensing: 0, local: 275817, global: 275817, isSync: 1, reboot: 0, bat: 4.34, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 3739, sensing: 0, local: 275304, global: 275304, isSync: 1, reboot: 0, bat: 4.11, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 3923, sensing: 0, local: 275791, global: 275791, isSync: 1, reboot: 0, bat: 4.46, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4017, sensing: 0, local: 275648, global: 275648, isSync: 1, reboot: 0, bat: 4.41, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 275310, global: 275310, isSync: 1, reboot: 0, bat: 4.33, logsize: 0, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 275360, global: 275360, isSync: 1, reboot: 0, bat: 4.26, logsize: 0, isErased: 0, download: 0, channel: 11,
+6 messages received!
+Fri May 15 22:26:54 2020, command: e
+id: 2384, sensing: 0, local: 337895, global: 337895, isSync: 1, reboot: 0, bat: 4.44, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 3739, sensing: 0, local: 337222, global: 337222, isSync: 1, reboot: 0, bat: 4.13, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 3923, sensing: 0, local: 336387, global: 336387, isSync: 1, reboot: 0, bat: 4.46, logsize: 16, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 339164, global: 339164, isSync: 1, reboot: 0, bat: 4.26, logsize: 16, isErased: 0, download: 0, channel: 11,
+4 messages received!
+id: 4017, sensing: 0, local: 343499, global: 343499, isSync: 1, reboot: 0, bat: 4.42, logsize: 16, isErased: 0, download: 0, channel: 11,
+1 messages received!
+Fri May 15 22:30:07 2020, command: a
+Fri May 15 22:30:12 2020, command: a
+Fri May 15 22:30:15 2020, command: t
+Fri May 15 22:30:19 2020, command: a
+Fri May 15 22:30:27 2020, command: a
+Fri May 15 22:30:37 2020, command: s
+Fri May 15 22:30:59 2020, command: a
+Fri May 15 22:34:03 2020, command: g
+Fri May 15 23:05:55 2020, command: s
+id: 2384, sensing: 1, local: 2689819, global: 2689819, isSync: 1, reboot: 0, bat: 4.50, logsize: 490, isErased: 0, download: 0, channel: 11,
+id: 3739, sensing: 1, local: 2689784, global: 2689784, isSync: 1, reboot: 0, bat: 4.28, logsize: 490, isErased: 0, download: 0, channel: 11,
+id: 4017, sensing: 1, local: 2690295, global: 2690295, isSync: 1, reboot: 0, bat: 4.60, logsize: 490, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 1, local: 2689872, global: 2689872, isSync: 1, reboot: 0, bat: 4.61, logsize: 66046, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 1, local: 2691055, global: 2691055, isSync: 1, reboot: 0, bat: 4.54, logsize: 491, isErased: 0, download: 0, channel: 11,
+5 messages received!
+Fri May 15 23:06:15 2020, command: b
+Fri May 15 23:08:31 2020, command: t
+Fri May 15 23:08:36 2020, command: a
+Fri May 15 23:08:51 2020, command: r
+id: 2384, sensing: 0, local: 2872519, global: 2872519, isSync: 1, reboot: 0, bat: 4.48, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 3739, sensing: 0, local: 2873232, global: 2873232, isSync: 1, reboot: 0, bat: 4.25, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 3923, sensing: 0, local: 2873122, global: 2873122, isSync: 1, reboot: 0, bat: 4.50, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 4017, sensing: 0, local: 2873213, global: 2873213, isSync: 1, reboot: 0, bat: 4.61, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 2873592, global: 2873592, isSync: 1, reboot: 0, bat: 4.60, logsize: 66061, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 2872614, global: 2872614, isSync: 1, reboot: 0, bat: 4.54, logsize: 501, isErased: 0, download: 0, channel: 11,
+6 messages received!
+Fri May 15 23:11:09 2020, command: s
+id: 2384, sensing: 0, local: 3011929, global: 3011929, isSync: 1, reboot: 0, bat: 4.50, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 3739, sensing: 0, local: 3011553, global: 3011553, isSync: 1, reboot: 0, bat: 4.25, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 3923, sensing: 0, local: 3011403, global: 3011403, isSync: 1, reboot: 0, bat: 4.51, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 4017, sensing: 0, local: 3010972, global: 3010972, isSync: 1, reboot: 0, bat: 4.58, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 4086, sensing: 0, local: 3011311, global: 3011311, isSync: 1, reboot: 0, bat: 4.59, logsize: 66061, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 3010547, global: 3010547, isSync: 1, reboot: 0, bat: 4.54, logsize: 501, isErased: 0, download: 0, channel: 11,
+6 messages received!
+Fri May 15 23:19:55 2020, command: d
+
+RESETTING CHANNELS BEFORE NEXT ITERATION
+
+
+id:    0, sensing: 0, local: 0, global: 0, isSync: 0, reboot: 0, bat: 0.00, logsize: 0, isErased: 0, download: 0, channel: 0,
+1 messages received!
+download start: Fri May 15 23:20:45 2020, channel: 16, nodeid: 4086
+download start: Fri May 15 23:20:45 2020, channel: 15, nodeid: 2384
+download end: Fri May 15 23:21:15 2020, channel: 15, nodeid: 2384
+download start: Fri May 15 23:21:15 2020, channel: 15, nodeid: 3739
+download end: Fri May 15 23:21:55 2020, channel: 15, nodeid: 3739
+download start: Fri May 15 23:21:55 2020, channel: 15, nodeid: 4017
+download end: Fri May 15 23:22:45 2020, channel: 15, nodeid: 4017
+download end: Fri May 15 23:37:35 2020, channel: 16, nodeid: 4086
+
+Calculating download time for 10 iterations
+
+Time Elapsed: 
+D:0, 
+H:0, 
+M:17, 
+S:20
+Fri May 15 23:37:53 2020, command: s
+id: 3923, sensing: 0, local: 4653677, global: 4653677, isSync: 1, reboot: 0, bat: 4.58, logsize: 501, isErased: 0, download: 0, channel: 11,
+id: 4262, sensing: 0, local: 4655396, global: 4655396, isSync: 1, reboot: 0, bat: 4.54, logsize: 501, isErased: 0, download: 0, channel: 11,
+2 messages received!
+Fri May 15 23:38:09 2020, command: d
+
+RESETTING CHANNELS BEFORE NEXT ITERATION
+
+
+download start: Fri May 15 23:38:59 2020, channel: 16, nodeid: 4262
+download start: Fri May 15 23:38:59 2020, channel: 15, nodeid: 3923
+download end: Fri May 15 23:39:19 2020, channel: 16, nodeid: 4262
+download end: Fri May 15 23:40:50 2020, channel: 15, nodeid: 3923
+
+RESETTING CHANNELS BEFORE NEXT ITERATION
+
+
+download start: Fri May 15 23:41:20 2020, channel: 16, nodeid: 3923
+download end: Fri May 15 23:42:20 2020, channel: 16, nodeid: 3923
+
+Calculating download time for 10 iterations
+
+Time Elapsed: 
+D:0, 
+H:0, 
+M:3, 
+S:50

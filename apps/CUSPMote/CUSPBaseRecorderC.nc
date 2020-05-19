@@ -153,17 +153,17 @@ implementation {
   App.PacketTransmitPower -> RF233ActiveMessageC.PacketTransmitPower;
     
   #ifdef MOTE_DEBUG
-    components DiagMsgC;
-    App.DiagMsg -> DiagMsgC;
+	  components DiagMsgC;
+	  App.DiagMsg -> DiagMsgC;
   #endif
 
   #ifdef DISSEMINATION_ON
-  components DisseminationC;
-  App.DisseminationControl -> DisseminationC;
+	  components DisseminationC;
+	  App.DisseminationControl -> DisseminationC;
 
-  components new DisseminatorC(uint16_t, 0x1234) as CommandObjectC;
-  App.CommandValue -> CommandObjectC;
-  App.CommandUpdate -> CommandObjectC;
+	  components new DisseminatorC(uint16_t, 0x1234) as CommandObjectC;
+	  App.CommandValue -> CommandObjectC;
+	  App.CommandUpdate -> CommandObjectC;
   #endif
   
   components BlinkC;

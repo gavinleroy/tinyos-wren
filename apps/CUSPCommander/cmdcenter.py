@@ -487,8 +487,6 @@ class CmdCenter:
 
     def _downloadData(self, motes):
 	'''
-	This download method was created by Gavin Gray 10/2019
-
 	This was created to ensure that all motes were downloaded and that the program
 	would never stall. It processes the downloads concurrently with as many threads as
 	there are downloaders connected. 
@@ -731,7 +729,6 @@ class CmdCenter:
         print "Hit 'a' to stop blink"
         print "Hit 'h' for help"
         print "Hit 'x' for radio channel reset"
-        #print "Hit 'w' to get ready for download"
         print "Hit 's <nodeid>' to get status of one specific node"
         print "Hit 'g <nodeid>' to start sensing a specific node"
         print "Hit 'b <nodeid>' to stop sensing a specific node"

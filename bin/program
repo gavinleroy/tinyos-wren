@@ -1,0 +1,241 @@
+#!/bin/bash
+
+
+# Copyright (c) 2012 University of Utah.
+# * All rights reserved.
+# Direct all questions to gavinleroy6 (at) gmail (dot) com
+
+
+export MOTE_ACC
+
+
+# Write the contents to this file in case it will be reused
+export DESTDIR="LASTPROGRAM.txt"
+
+
+echo "--------------------------------------------------------------------------"
+echo "--------------------------------------------------------------------------"
+echo "** WARNING: first make sure that the Station is mounted at /dev/ttyUSB0 **"
+echo "--------------------------------------------------------------------------"
+echo "--------------------------------------------------------------------------"
+
+# First prompt user if they are programming motes of accelerometers
+echo "Mote, Accelerometer, Null, Blink, or repeat last programming [m / a / n / b / r]?"
+
+
+# Read in the value which must be in the set {m, a}
+read MOTE_ACC
+
+
+########################################
+# 	PROGRAMMING MOTE
+########################################
+if [ "$MOTE_ACC" == "m" ]
+then 
+	echo You are programming a mote!
+
+	export RX_PDT_LEVEL
+	export DEF_RFPOWER
+	export SENS_INTERVAL
+	export HB_INTERVAL
+	export DLD_INTERVAL
+
+	echo "What value should be used for RX_PDT_LEVEL?"
+	read RX_PDT_LEVEL
+	while [[ "$RX_PDT_LEVEL" != "0x0" && "$RX_PDT_LEVEL" != "0x1" && 
+		"$RX_PDT_LEVEL" != "0x2" && "$RX_PDT_LEVEL" != "0x3" && 
+		"$RX_PDT_LEVEL" != "0x4" && "$RX_PDT_LEVEL" != "0x5" && 
+		"$RX_PDT_LEVEL" != "0x6" && "$RX_PDT_LEVEL" != "0x7" && 
+		"$RX_PDT_LEVEL" != "0x8" && "$RX_PDT_LEVEL" != "0x9" && 
+		"$RX_PDT_LEVEL" != "0xA" && "$RX_PDT_LEVEL" != "0xB" && 
+		"$RX_PDT_LEVEL" != "0xC" && "$RX_PDT_LEVEL" != "0xD" && 
+		"$RX_PDT_LEVEL" != "0xE" && "$RX_PDT_LEVEL" != "0xF" ]]; do
+		echo "INVALID VALUE: the possible values are '0x{0-F}."
+		read RX_PDT_LEVEL
+	done
+
+	echo "What value should be used for DEF_RFPOWER?"
+	read DEF_RFPOWER
+	while [[ ("$DEF_RFPOWER" != "0x0" && "$DEF_RFPOWER" != "0x1" && 
+		"$DEF_RFPOWER" != "0x2" && "$DEF_RFPOWER" != "0x3" && 
+		"$DEF_RFPOWER" != "0x4" && "$DEF_RFPOWER" != "0x5" && 
+		"$DEF_RFPOWER" != "0x6" && "$DEF_RFPOWER" != "0x7" && 
+		"$DEF_RFPOWER" != "0x8" && "$DEF_RFPOWER" != "0x9" && 
+		"$DEF_RFPOWER" != "0xA" && "$DEF_RFPOWER" != "0xB" && 
+		"$DEF_RFPOWER" != "0xC" && "$DEF_RFPOWER" != "0xD" && 
+		"$DEF_RFPOWER" != "0xE" && "$DEF_RFPOWER" != "0xF") || $((RX_PDT_LEVEL-DEF_RFPOWER)) < 2 ]]; do
+		echo "INVALID VALUE: the possible values are '0x{0-F} and it must be at least 2 steps below RX_PDT_LEVEL."
+		read DEF_RFPOWER
+	done
+
+	echo "What value should be used for DSENSING_INTERVAL? Don't include the 'L'"
+	read SENS_INTERVAL
+	export SENS_INTERVAL="${SENS_INTERVAL}L"
+
+	echo "What value should be used for DHEARTBEAT_INTERVAL?"
+	read HB_INTERVAL
+
+	echo "What value should be used for DLED_INTERVAL?"
+	read DLD_INTERVAL
+
+	# Write the last used values for possible later use
+	echo "$MOTE_ACC" > "$DESTDIR"
+	echo "$RX_PDT_LEVEL" >> "$DESTDIR"
+	echo "$DEF_RFPOWER" >> "$DESTDIR"
+	echo "$SENS_INTERVAL" >> "$DESTDIR"
+	echo "$HB_INTERVAL" >> "$DESTDIR"
+	echo "$DLD_INTERVAL" >> "$DESTDIR"
+
+	cd ~/tinyos-wren/apps/CUSPMote
+	exec make wren install,0x00 i2cbsl,/dev/ttyUSB0
+
+
+########################################
+# 	PROGRAMMING ACCELEROMETER
+########################################
+elif [ "$MOTE_ACC" == "a" ]
+then
+	export DEF_RFPOWER
+	export DACCEL_THRESHOLD
+	export DHB_INTERVAL
+	export DLD_INTERVAL
+
+
+	echo "What value should be used for DEF_RFPOWER?"
+	read DEF_RFPOWER
+	while [[ ("$DEF_RFPOWER" != "0x0" && "$DEF_RFPOWER" != "0x1" && 
+		"$DEF_RFPOWER" != "0x2" && "$DEF_RFPOWER" != "0x3" && 
+		"$DEF_RFPOWER" != "0x4" && "$DEF_RFPOWER" != "0x5" && 
+		"$DEF_RFPOWER" != "0x6" && "$DEF_RFPOWER" != "0x7" && 
+		"$DEF_RFPOWER" != "0x8" && "$DEF_RFPOWER" != "0x9" && 
+		"$DEF_RFPOWER" != "0xA" && "$DEF_RFPOWER" != "0xB" && 
+		"$DEF_RFPOWER" != "0xC" && "$DEF_RFPOWER" != "0xD" && 
+		"$DEF_RFPOWER" != "0xE" && "$DEF_RFPOWER" != "0xF") ]]; do
+		echo "INVALID VALUE: the possible values are '0x{0-F}."
+		read DEF_RFPOWER
+	done
+
+	echo "What value should be used for DACCEL_THRESHOLD?"
+	read DACCEL_THRESHOLD
+
+	echo "What value should be used for DHB_INTERVAL?"
+	read DHB_INTERVAL
+
+	echo "What value should be used for DLED_INTERVAL?"
+	read DLD_INTERVAL
+
+	# Write the last used values for possible later use
+	echo "$MOTE_ACC" > "$DESTDIR"
+	echo "$DEF_RFPOWER" >> "$DESTDIR"
+	echo "$DACCEL_THRESHOLD" >> "$DESTDIR"
+	echo "$DHB_INTERVAL" >> "$DESTDIR"
+	echo "$DLD_INTERVAL" >> "$DESTDIR"
+
+	cd ~/tinyos-wren-va/apps/CUSPAccelerometer
+	exec make wren install,0x00 i2cbsl,/dev/ttyUSB0
+
+
+########################################
+# 	  PROGRAMMING NULL
+########################################
+elif [ "$MOTE_ACC" == "n" ]
+then
+	cd ~/tinyos-wren/apps/Null
+	exec make wren install,0x00 i2cbsl,/dev/ttyUSB0
+
+########################################
+# 	  PROGRAMMING BLINK
+########################################
+elif [ "$MOTE_ACC" == "b" ]
+then
+	cd ~/tinyos-wren/apps/Blink
+	exec make wren install,0x00 i2cbsl,/dev/ttyUSB0
+
+
+#########################################
+# 	  PROGRAMMING REDO
+########################################
+elif [ "$MOTE_ACC" == "r" ]
+then
+	# If file does not exist then return and stop executing
+	if test -f "$DESTDIR"; then
+		echo "Reprogramming with available data: "
+		cat $DESTDIR
+	else
+		echo "ERROR: Last program not available: please restart and program a new Mote or Accelerometer."
+		exit 2
+	fi
+
+	read MOTE_ACC < LASTPROGRAM.txt
+	sed -i '1,1 d' LASTPROGRAM.txt
+
+
+	#########################################
+	# 	PROGRAMMING MOTE FROM FILE
+	########################################
+	if [ "$MOTE_ACC" == "m" ]
+	then 
+		export RX_PDT_LEVEL
+		export DEF_RFPOWER
+		export SENS_INTERVAL
+		export HB_INTERVAL
+		export DLD_INTERVAL
+
+	 	# Read variables from file
+		read RX_PDT_LEVEL < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read DEF_RFPOWER < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read SENS_INTERVAL < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read HB_INTERVAL < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read DLD_INTERVAL < $DESTDIR
+
+		# Write the last used values for possible later use
+		echo "$MOTE_ACC" > "$DESTDIR"
+		echo "$RX_PDT_LEVEL" >> "$DESTDIR"
+		echo "$DEF_RFPOWER" >> "$DESTDIR"
+		echo "$SENS_INTERVAL" >> "$DESTDIR"
+		echo "$HB_INTERVAL" >> "$DESTDIR"
+		echo "$DLD_INTERVAL" >> "$DESTDIR"
+
+		cd ~/tinyos-wren/apps/CUSPMote
+		exec make wren install,0x00 i2cbsl,/dev/ttyUSB0
+
+
+	############################################
+	# 	PROGRAMMING ACCELEROMETER FROM FILE
+	############################################
+	elif [ "$MOTE_ACC" == "a" ]
+	then
+		export DEF_RFPOWER
+		export DACCEL_THRESHOLD
+		export DHB_INTERVAL
+		export DLD_INTERVAL
+
+	 	# Read variables from file
+		read DEF_RFPOWER < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read DACCEL_THRESHOLD < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read DHB_INTERVAL < $DESTDIR
+		sed -i '1,1 d' $DESTDIR
+		read DLD_INTERVAL < $DESTDIR
+
+		# Write the last used values for possible later use
+		echo "$MOTE_ACC" > "$DESTDIR"
+		echo "$DEF_RFPOWER" >> "$DESTDIR"
+		echo "$DACCEL_THRESHOLD" >> "$DESTDIR"
+		echo "$DHB_INTERVAL" >> "$DESTDIR"
+		echo "$DLD_INTERVAL" >> "$DESTDIR"
+
+		cd ~/tinyos-wren-va/apps/CUSPAccelerometer
+		exec make wren install,0x00 i2cbsl,/dev/ttyUSB0
+
+
+	fi # IF/ELSE for reprogramming
+
+else
+	echo "Invalid option entered, try again"
+fi # IF/ELSE for programming
